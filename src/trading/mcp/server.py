@@ -28,7 +28,12 @@ _Session = sessionmaker(bind=_engine)
 # Serveur MCP
 # ------------------------------------------------------------------
 
-mcp = FastMCP("trading-engine")
+mcp = FastMCP(
+    "trading-engine",
+    host=os.environ.get("FASTMCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("FASTMCP_PORT", "8000")),
+    log_level=os.environ.get("FASTMCP_LOG_LEVEL", "INFO"),
+)
 
 
 def _to_dict(rows):
