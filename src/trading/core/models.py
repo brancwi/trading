@@ -64,6 +64,9 @@ class SentimentScore(Base):
     anomaly_flag = Column(Integer, default=0)
     qwen_arbitrated = Column(Integer, default=0)
     cloud_fallback_used = Column(Integer, default=0)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    estimated_cost_usd = Column(Float, default=0.0)
 
 
 class Signal(Base):

@@ -101,12 +101,18 @@ class CloudFallback:
         }
 
     def _parse_response(self, response_data: dict) -> dict | None:
-        """Extrait le JSON de la réponse API."""
+        """Extrait le JSON de la réponse API + usage tokens."""
         try:
             if self.provider == "anthropic":
                 content = response_data["content"][0]["text"]
+                usage = response_data.get("usage", {})
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
             else:
                 content = response_data["choices"][0]["message"]["content"]
+                usage = response_data.get("usage", {})
+                input_tokens = usage.get("prompt_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0)
 
             parsed = json.loads(content)
             label = parsed.get("sentiment", "neutral").lower().strip()
@@ -119,6 +125,8 @@ class CloudFallback:
                 "label": label,
                 "confidence": min(1.0, max(0.0, confidence)),
                 "reason": reason,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
             }
         except Exception as e:
             logger.warning(f"Failed to parse cloud response: {e}")
@@ -141,7 +149,8 @@ class CloudFallback:
                 if result:
                     logger.info(
                         f"Cloud fallback [{self.provider}/{self.model}] → "
-                        f"{result['label']} (conf={result['confidence']:.2f})"
+                        f"{result['label']} (conf={result['confidence']:.2f}, "
+                        f"tokens={result.get('input_tokens', 0)}+{result.get('output_tokens', 0)})"
                     )
                 return result
         except httpx.HTTPStatusError as e:

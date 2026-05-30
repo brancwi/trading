@@ -11,6 +11,7 @@ from trading.core.config import get_settings
 from trading.core.models import News, SentimentScore, Signal, SignalAction
 from trading.sentiment.cloud_fallback import CloudFallback
 from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financial_keywords
+from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -157,8 +158,8 @@ class SentimentAnalyzerV2:
     def _infer_modern(self, text: str) -> float:
         return self._infer_classifier(text, self._tk_modern, self._md_modern, self._label_map_modern)
 
-    def _infer_qwen(self, text: str) -> tuple[float, float]:
-        """Inférence Qwen3-0.6B causal. Retourne (score, confidence)."""
+    def _infer_qwen(self, text: str) -> tuple[float, float, TokenUsage]:
+        """Inférence Qwen3-0.6B causal. Retourne (score, confidence, token_usage)."""
         tr, torch = _load_ml_libs()
         system = "Classify the financial sentiment as positive, neutral, or negative."
         prompt = self._tk_qwen.apply_chat_template(
@@ -170,6 +171,10 @@ class SentimentAnalyzerV2:
             tokenize=False,
             enable_thinking=False,
         )
+
+        # Comptage tokens input
+        input_tokens = len(self._tk_qwen.encode(prompt))
+
         inputs = self._tk_qwen([prompt], return_tensors="pt").to(self._md_qwen.device)
 
         with torch.no_grad():
@@ -190,8 +195,22 @@ class SentimentAnalyzerV2:
         token_probs = torch.nn.functional.softmax(token_scores, dim=-1)
         confidence = token_probs[gen_token_id].item()
 
-        logger.debug(f"Qwen arbitre → '{gen_text}' (score={score:.2f}, conf={confidence:.2f})")
-        return score, confidence
+        # Estimer le coût si ce même prompt était envoyé au cloud
+        tracker = TokenTracker()
+        # Coût estimé sur GPT-4o-mini (référence "cloud le plus probable")
+        cloud_usage = TokenUsage(
+            input_tokens=input_tokens,
+            output_tokens=1,
+            provider="openai",
+            model="gpt-4o-mini",
+        )
+        tracker.record(cloud_usage)
+
+        logger.debug(
+            f"Qwen arbitre → '{gen_text}' (score={score:.2f}, conf={confidence:.2f}, "
+            f"tokens_in={input_tokens}, est_cost_cloud=${cloud_usage.estimated_cost_usd:.6f})"
+        )
+        return score, confidence, cloud_usage
 
     # ------------------------------------------------------------------
     # Analyse principale
@@ -218,6 +237,9 @@ class SentimentAnalyzerV2:
             "divergence": 0.0,
             "anomaly": False,
             "keywords": "",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated_cost_usd": 0.0,
         }
 
         # ---- Tier 0 : règles lexicales ----
@@ -254,9 +276,12 @@ class SentimentAnalyzerV2:
         # ---- Tier 3 : divergence → Qwen arbitre ----
         logger.info(f"Divergence detected ({divergence:.2f}) → calling Qwen arbitre")
         result["anomaly"] = True
-        qwen_score, qwen_conf = self._infer_qwen(text)
+        qwen_score, qwen_conf, token_usage = self._infer_qwen(text)
         result["qwen_score"] = round(qwen_score, 4)
         result["qwen_confidence"] = round(qwen_conf, 4)
+        result["input_tokens"] = token_usage.input_tokens
+        result["output_tokens"] = token_usage.output_tokens
+        result["estimated_cost_usd"] = token_usage.estimated_cost_usd
 
         # Si Qwen est confiant, on lui fait confiance
         if qwen_conf >= 0.5:
@@ -274,6 +299,17 @@ class SentimentAnalyzerV2:
             if cloud_res:
                 result["cloud_score"] = round(cloud_res["score"], 4)
                 result["cloud_confidence"] = round(cloud_res["confidence"], 4)
+                result["input_tokens"] = cloud_res.get("input_tokens", 0)
+                result["output_tokens"] = cloud_res.get("output_tokens", 0)
+                # Estimer le coût réel du cloud
+                from trading.sentiment.token_tracker import TokenUsage as _TU
+                cu = _TU(
+                    input_tokens=result["input_tokens"],
+                    output_tokens=result["output_tokens"],
+                    provider=settings.ml_cloud_provider,
+                    model=settings.ml_cloud_model,
+                )
+                result["estimated_cost_usd"] = cu.estimated_cost_usd
                 combined = cloud_res["score"]
                 confidence = cloud_res["confidence"] * 0.9  # pénalité légère cloud
                 result["combined"] = round(combined, 4)
@@ -320,6 +356,9 @@ class SentimentAnalyzerV2:
                 anomaly_flag=int(result["anomaly"]),
                 qwen_arbitrated=int(result["qwen_score"] is not None and result["anomaly"]),
                 cloud_fallback_used=int(result["cloud_score"] is not None),
+                input_tokens=result.get("input_tokens", 0),
+                output_tokens=result.get("output_tokens", 0),
+                estimated_cost_usd=result.get("estimated_cost_usd", 0.0),
             )
             db.add(sentiment)
             item.processed = 1
