@@ -19,8 +19,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Database
+    # Database (SQLite local ou PostgreSQL Docker)
     database_url: str = f"sqlite:///{DATA_DIR}/trading.db"
+    postgres_password: str = "changeme"
 
     # API Keys
     finnhub_api_key: str = ""

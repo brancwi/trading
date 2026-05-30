@@ -10,16 +10,18 @@ from trading.core.config import get_settings
 
 settings = get_settings()
 
-# Engine SQLite avec options pour éviter les locks concurrents
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
-    echo=False,
-    pool_pre_ping=True,
-)
+# Engine adaptatif SQLite / PostgreSQL
+_db_url = settings.database_url
+_is_sqlite = _db_url.startswith("sqlite")
+
+_engine_kwargs = {"echo": False, "pool_pre_ping": True}
+if _is_sqlite:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(_db_url, **_engine_kwargs)
 
 # Pour SQLite : activer les clés étrangères
-if settings.database_url.startswith("sqlite"):
+if _is_sqlite:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_conn, _connection_record):
         cursor = dbapi_conn.cursor()

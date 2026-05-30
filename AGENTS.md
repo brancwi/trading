@@ -1,10 +1,10 @@
-# AGENTS.md — Trading Engine V4.1
+# AGENTS.md — Trading Engine V4.2
 
 ## Contexte & Objectif
 
 Système de **simulation de trading algorithmique multi-stratégies** avec analyse de sentiment ML multi-tier (DistilRoBERTa + ModernFinBERT + Qwen3-0.6B + fallback cloud), orchestré par **Prefect v3** en architecture **event-driven**.
 
-Le système est conçu pour être piloté par **Hermes** (assistant IA) via une **API FastAPI**, sans que Hermes n'exécute directement le code métier.
+Le système est conçu pour être piloté par **Hermes** (assistant IA) via une **API FastAPI** + **protocole MCP** (SSE), sans que Hermes n'exécute directement le code métier.
 
 ---
 
@@ -15,11 +15,13 @@ Le système est conçu pour être piloté par **Hermes** (assistant IA) via une 
 | Langage | Python 3.11+ |
 | Orchestration | Prefect v3 (flows, events, automations) |
 | API | FastAPI + Pydantic v2 |
-| Base de données | SQLite (→ Postgres plus tard) |
+| Base de données | PostgreSQL 15 (Docker) — migrée depuis SQLite |
 | ML / GPU | PyTorch + Transformers (lazy load) |
 | Sources données | Finnhub REST + WebSocket, Alpha Vantage |
 | Notifications | Telegram Bot API |
-| Dashboard | Metabase (branché sur SQLite) |
+| Data Access MCP | MCP SDK 1.27.2 — SSE transport port 8001 |
+| Monitoring | MonitoringService + tables audit, token usage, metrics |
+| Dashboard | Metabase (branché sur PostgreSQL) |
 
 ---
 
@@ -30,8 +32,9 @@ trading/
 ├── .env                          # Clés API (copié depuis ~/.hermes/.env)
 ├── pyproject.toml
 ├── requirements.txt
+├── docker-compose.yml            # PostgreSQL + API + Listener + MCP + Prefect + Metabase
 ├── sql/
-│   └── schema.sql                # Schéma complet (10 tables + vues)
+│   └── schema.sql                # Schéma complet (14+ tables + vues)
 ├── src/trading/
 │   ├── core/                     # Config, DB (SQLAlchemy 2.0), Models
 │   │   ├── config.py
@@ -41,10 +44,13 @@ trading/
 │   │   ├── main.py               # App + lifespan
 │   │   ├── dependencies.py       # Auth API key
 │   │   └── routes/
-│   │       ├── status.py         # GET /status
+│   │       ├── status.py         # GET /status, /health
 │   │       ├── portfolios.py     # CRUD + liquidate/pause/resume
 │   │       ├── strategies.py     # Config dynamique
-│   │       └── decisions.py      # Injection manuelle Hermes
+│   │       ├── decisions.py      # Injection manuelle Hermes
+│   │       └── monitoring.py     # GET /monitoring/*, /monitoring/audit
+│   ├── mcp/                      # MCP Server (SSE transport)
+│   │   └── server.py             # FastMCP — tools de données pour Hermes
 │   ├── events/                   # Event Layer (Prefect Events)
 │   │   ├── listener.py           # Service asyncio (websocket + polling)
 │   │   └── emitters.py           # Helpers emit_event()
@@ -53,7 +59,8 @@ trading/
 │   ├── sentiment/
 │   │   ├── analyzer.py           # SentimentAnalyzerV2 — 4 tiers
 │   │   ├── lexical_rules.py      # Override par mots-clés financiers
-│   │   └── cloud_fallback.py     # Fallback GPT-4/Claude API
+│   │   ├── cloud_fallback.py     # Fallback GPT-4/Claude API
+│   │   └── token_tracker.py      # TokenUsageLog + coût estimé
 │   ├── strategies/
 │   │   ├── base.py               # StrategyBase ABC
 │   │   ├── simulation.py         # Day-trading sur signaux
@@ -64,6 +71,8 @@ trading/
 │   │   └── commands.py           # Command Bus (Hermes → Engine)
 │   ├── notifier/
 │   │   └── telegram.py           # Notifications Telegram
+│   ├── monitoring/
+│   │   └── service.py            # MonitorService — metrics, audit, token usage
 │   └── flows/                    # Flows Prefect indépendants
 │       ├── ingestion_flow.py     # Fetch données (schedule 2min)
 │       ├── sentiment_flow.py     # Analyse ML (event-driven)
@@ -73,9 +82,11 @@ trading/
 │       ├── notifications_flow.py # Telegram (schedule 20h)
 │       └── deploy.py             # Crée deployments + automations
 ├── scripts/
-│   ├── init_db.py                # Initialise SQLite + portfolios
+│   ├── init_db.py                # Initialise DB + portfolios
 │   ├── run_api.py                # Lance FastAPI (uvicorn)
-│   └── run_listener.py           # Lance EventListener asyncio
+│   ├── run_listener.py           # Lance EventListener asyncio
+│   ├── run_mcp_server.py         # Lance MCP Server SSE (port 8001)
+│   └── migrate_sqlite_to_postgres.py  # Migration SQLite → PostgreSQL
 ├── .kimi/skills/
 │   └── prefect-trading/
 │       └── SKILL.md              # Connaissance Prefect du projet
@@ -104,12 +115,14 @@ docker-compose ps
 
 # 3. Accéder aux services
 # API FastAPI  → http://localhost:8000/docs
+# MCP Server   → http://localhost:8001/sse  (Hermes data access)
 # Prefect UI   → http://localhost:4200
 # Metabase     → http://localhost:3000
 
 # 4. Voir les logs
 docker-compose logs -f trading-api
 docker-compose logs -f trading-listener
+docker-compose logs -f trading-mcp-server
 docker-compose logs -f prefect-server
 
 # 5. Arrêter
@@ -127,16 +140,22 @@ docker-compose down -v
 python scripts/init_db.py
 ```
 
-Crée `data/trading.db` + 3 portefeuilles (simulation: $3000, rotation: $3000, ninja: €500).
+Crée le schéma PostgreSQL + 3 portefeuilles (simulation: $3000, rotation: $3000, ninja: €500).
 
-#### 2. Démarrer Prefect Server (UI)
+#### 2. Démarrer PostgreSQL (Docker)
+
+```bash
+docker-compose up -d postgres
+```
+
+#### 3. Démarrer Prefect Server (UI)
 
 ```bash
 prefect server start
 ```
 → UI accessible sur http://localhost:4200
 
-#### 3. Démarrer l'API FastAPI
+#### 4. Démarrer l'API FastAPI
 
 ```bash
 python scripts/run_api.py
@@ -144,7 +163,14 @@ python scripts/run_api.py
 → API sur http://localhost:8000/docs (Swagger)
 → Clé API par défaut: `dev-secret-change-me` (header `x-api-key`)
 
-#### 4. Démarrer le Listener (WebSocket + Polling)
+#### 5. Démarrer le MCP Server
+
+```bash
+python scripts/run_mcp_server.py
+```
+→ MCP SSE sur http://localhost:8001/sse
+
+#### 6. Démarrer le Listener (WebSocket + Polling)
 
 ```bash
 python scripts/run_listener.py
@@ -154,13 +180,13 @@ python scripts/run_listener.py
 → Poll les commandes Hermes toutes les 30s
 → Émet des Prefect Events
 
-#### 5. Créer les Deployments Prefect
+#### 7. Créer les Deployments Prefect
 
 ```bash
 python -m trading.flows.deploy
 ```
 
-#### 6. Tester un flow manuellement
+#### 8. Tester un flow manuellement
 
 ```bash
 python -m trading.flows.ingestion_flow
@@ -176,6 +202,9 @@ docker build -t trading-engine .
 
 # Run API
 docker run -d -p 8000:8000 -v trading-data:/app/data --env-file .env trading-engine
+
+# Run MCP Server
+docker run -d -p 8001:8001 -v trading-data:/app/data --env-file .env trading-engine python scripts/run_mcp_server.py
 
 # Run Listener
 docker run -d -v trading-data:/app/data --env-file .env trading-engine python scripts/run_listener.py
@@ -194,11 +223,12 @@ docker run -d -p 3000:3000 -v metabase-data:/metabase-data metabase/metabase
 Définies dans `.env` (récupérées depuis `~/.hermes/.env`):
 
 ```bash
-FINNHUB_API_KEY=d8b0219r01qk20sp3cqgd8b0219r01qk20sp3cr0
-TELEGRAM_BOT_TOKEN=8590713252:AAErFmDWzsB-xD44l1lMgIgFbJcKy7Orp_s
-TELEGRAM_CHAT_ID=7139818351
+FINNHUB_API_KEY=xxx
+TELEGRAM_BOT_TOKEN=xxx
+TELEGRAM_CHAT_ID=xxx
 API_KEY=dev-secret-change-me
-DATABASE_URL=sqlite:///data/trading.db
+DATABASE_URL=postgresql://trading:changeme@localhost:5432/trading
+PREFECT_API_URL=http://localhost:4200/api
 ```
 
 ---
@@ -210,7 +240,7 @@ DATABASE_URL=sqlite:///data/trading.db
 1. **EventListener** (`run_listener.py`) écoute les sources et écrit en DB
 2. Quand il y a du nouveau, il appelle `emit_event()` (Prefect)
 3. **Prefect Automations** détectent l'event et déclenchent le flow associé
-4. Le flow lit l'état depuis SQLite, exécute sa logique, écrit le résultat
+4. Le flow lit l'état depuis PostgreSQL, exécute sa logique, écrit le résultat
 5. Si un portfolio est modifié, un event `portfolio.updated` est émis
 6. Ce event déclenche `metrics_flow` + `notifications_flow`
 
@@ -240,6 +270,11 @@ curl -H "x-api-key: dev-secret-change-me" http://localhost:8000/status
 # Synthèse PnL
 curl -H "x-api-key: dev-secret-change-me" http://localhost:8000/portfolios/summary
 
+# Monitoring — audit, tokens, metrics
+curl -H "x-api-key: dev-secret-change-me" http://localhost:8000/monitoring/audit
+curl -H "x-api-key: dev-secret-change-me" http://localhost:8000/monitoring/token-usage
+curl -H "x-api-key: dev-secret-change-me" http://localhost:8000/monitoring/metrics
+
 # Injecter une décision manuelle
 curl -X POST -H "x-api-key: dev-secret-change-me" \
   -H "Content-Type: application/json" \
@@ -260,6 +295,38 @@ curl -X POST -H "x-api-key: dev-secret-change-me" \
   -d '{"sentiment_threshold":0.7}' \
   http://localhost:8000/strategies/simulation/config
 ```
+
+---
+
+## MCP Server — Hermes Data Access
+
+Transport **SSE** sur le port **8001**. Hermes se connecte à `http://localhost:8001/sse`.
+
+### Tools exposés
+
+| Tool | Description |
+|------|-------------|
+| `list_portfolios` | Liste tous les portefeuilles avec soldes |
+| `get_positions(portfolio_id)` | Positions actuelles d'un portefeuille |
+| `get_portfolio_details(portfolio_id)` | Détails complets (info + positions + trades) |
+| `get_trade_history(portfolio_id, limit=50)` | Historique des trades |
+| `get_balance_history(portfolio_id, limit=50)` | Historique solde time-series |
+| `get_signals(consumed=None, limit=50)` | Signaux générés par le sentiment engine |
+| `get_sentiment_scores(ticker=None, limit=50)` | Scores multi-modèles (FinBERT, Qwen, Cloud) |
+| `get_market_data(ticker, limit=50)` | Données OHLCV |
+| `get_news(ticker=None, limit=50)` | News financières |
+| `execute_sql_query(query)` | SQL read-only (SELECT uniquement) — sécurisé |
+| `reserve_capital(portfolio_id, amount, reason)` | Réserve du capital (soustrait du cash disponible) |
+| `release_capital(portfolio_id, amount)` | Libère du capital réservé |
+| `get_capital_movements(portfolio_id, limit=50)` | Historique des mouvements de capital |
+| `get_token_usage(hours=24)` | Consommation tokens et coût estimé |
+| `get_audit_log(hours=24, event_type=None)` | Journal d'audit |
+
+### Capital Movements
+
+- `Portfolio.cash_available = cash_current - reserved_cash`
+- Les stratégies `buy()` doivent vérifier `cash_available` avant d'acheter
+- `reserve_capital` et `release_capital` écrivent dans `capital_movements` table
 
 ---
 
@@ -288,12 +355,12 @@ prefect flow-run ls
 python -m trading.flows.strategy_flow --portfolio rotation
 ```
 
-### Vérifier la base SQLite
+### Vérifier la base PostgreSQL
 
 ```bash
-sqlite3 data/trading.db ".tables"
-sqlite3 data/trading.db "SELECT * FROM portfolios;"
-sqlite3 data/trading.db "SELECT * FROM signals WHERE consumed=0;"
+psql -h localhost -U trading -d trading -c "\dt"
+psql -h localhost -U trading -d trading -c "SELECT * FROM portfolios;"
+psql -h localhost -U trading -d trading -c "SELECT * FROM signals WHERE consumed=0;"
 ```
 
 ### Tester l'API localement
@@ -309,6 +376,13 @@ curl http://localhost:8000/health
 python scripts/run_listener.py
 ```
 
+### Vérifier le MCP Server
+
+```bash
+# Test basique (le serveur doit répondre sur /sse)
+curl http://localhost:8001/sse
+```
+
 ---
 
 ## Conventions de Code
@@ -316,14 +390,16 @@ python scripts/run_listener.py
 - **Python 3.11+**, type hints obligatoires
 - **SQLAlchemy 2.0** (style moderne, pas l'ancien Query)
 - **Pydantic v2** pour les API
-- **Pas de JSON** pour les portefeuilles → tout en SQLite
+- **PostgreSQL** — tout en base, pas de JSON files
 - **Lazy loading** des modèles ML (ne pas charger au démarrage API)
 - **`db_session()`** context manager pour transactions hors FastAPI
 - **`get_db()`** dependency pour FastAPI
 - **Thread-safe** : `SentimentAnalyzerV2` utilise un `threading.Lock()` pour le chargement GPU
 - **Sentiment Engine v2** : 4 tiers — lexical override → DistilRoBERTa + ModernFinBERT (séquentiel) → Qwen arbitre (si divergence > 0.3) → cloud fallback (si Qwen incertain)
-- **Token Tracking** : comptage input/output tokens pour chaque appel Qwen / cloud, avec estimation de coût ($/call) sur GPT-4o-mini, Claude Haiku, etc. Stocké en DB pour analyse cumulée avant migration cloud
+- **Token Tracking** : comptage input/output tokens pour chaque appel Qwen / cloud, avec estimation de coût ($/call) sur GPT-4o-mini, Claude Haiku, etc. Stocké en DB pour analyse cumulée
+- **Capital Movements** : `reserved_cash` sur `Portfolio`, `cash_available = cash_current - reserved_cash`, tracked dans `capital_movements` table
 - **8GB VRAM** : tous les modèles chargés simultanément (~1.9GB total), pas de batching (réactivité), pas de quantization (précision)
+- **MCP SDK 1.27.2** : FastMCP avec `run(transport="sse", port=8001)`
 
 ---
 
@@ -348,6 +424,13 @@ python scripts/run_listener.py
 2. Ajouter au skill `.kimi/skills/prefect-trading/SKILL.md`
 3. Créer un deployment via `deploy.py` ou `serve()`
 
+### Ajouter un tool MCP
+
+1. Ajouter une fonction `@mcp.tool()` dans `src/trading/mcp/server.py`
+2. Utiliser `_Session()` pour les requêtes SQL
+3. Utiliser `json.dumps(..., default=_json_serial)` pour sérialiser les datetimes
+4. Restart le service `docker-compose restart trading-mcp-server`
+
 ---
 
 ## Git
@@ -367,6 +450,7 @@ Historique:
 - **Projet** : `/home/brancwi/dev/projects/trading`
 - **Prefect UI** : http://localhost:4200 (quand `prefect server start`)
 - **API Docs** : http://localhost:8000/docs (quand `python scripts/run_api.py`)
+- **MCP Server** : http://localhost:8001/sse (quand `python scripts/run_mcp_server.py`)
 - **Skills** :
   - `.kimi/skills/prefect-mastery/SKILL.md` — Référence complète Prefect v3 (pur, générique)
   - `.kimi/skills/prefect-trading/SKILL.md` — Connaissance Prefect spécifique au projet

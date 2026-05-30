@@ -92,6 +92,7 @@ class Portfolio(Base):
     base_currency = Column(String, default="USD")
     cash_initial = Column(Float, nullable=False)
     cash_current = Column(Float, nullable=False)
+    reserved_cash = Column(Float, default=0.0)
     max_trade_amount = Column(Float)
     fee_per_order = Column(Float, default=1.0)
     status = Column(String, default="active")
@@ -175,6 +176,20 @@ class Alert(Base):
     channel = Column(String, default="telegram")
     sent_at = Column(DateTime, default=datetime.utcnow)
     error = Column(Text)
+
+
+class CapitalMovement(Base):
+    """Mouvements de capital (mise de côté, retrait, dépôt)."""
+
+    __tablename__ = "capital_movements"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.id"), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    movement_type = Column(String, nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    balance_after = Column(Float, nullable=False)
+    reason = Column(Text)
+    actor = Column(String, default="hermes")
 
 
 # =====================================================================
