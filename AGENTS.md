@@ -137,7 +137,7 @@ docker-compose down -v
 Un script de gestion centralisée gère tous les services en local :
 
 ```bash
-# Lancer tous les services
+# Lancer tous les services (PostgreSQL, MCP, API, Listener, Prefect)
 ./scripts/dev_manager.sh start
 
 # Voir l'état
@@ -150,11 +150,15 @@ Un script de gestion centralisée gère tous les services en local :
 ./scripts/dev_manager.sh logs mcp-server
 ./scripts/dev_manager.sh logs api-server
 ./scripts/dev_manager.sh logs listener
+./scripts/dev_manager.sh logs prefect-server
+./scripts/dev_manager.sh logs prefect-deploy
 
 # Redémarrer un service après modification
 ./scripts/dev_manager.sh restart mcp-server
 ./scripts/dev_manager.sh restart api-server
 ./scripts/dev_manager.sh restart listener
+./scripts/dev_manager.sh restart prefect-server
+./scripts/dev_manager.sh restart prefect-deploy
 
 # Arrêter tout
 ./scripts/dev_manager.sh stop
@@ -437,6 +441,34 @@ git log --oneline
 Historique:
 - `77f4f02` feat(v1.0): architecture event-driven Prefect avec flows indépendants
 - `45fdac4` feat(v4): architecture modulaire event-driven + API FastAPI
+
+---
+
+## Automatisations Prefect
+
+Tous les flows sont déployés automatiquement au démarrage via `dev_manager.sh`.
+
+### Flows avec schedule
+
+| Flow | Schedule | Description |
+|------|----------|-------------|
+| `ingestion-every-2min` | Toutes les 2 min | Fetch données marché |
+| `metrics-hourly` | Toutes les heures | Snapshots PnL |
+| `notifications-daily` | 20h00 | Notifications Telegram |
+| `validation-every-4h` | Toutes les 4h | Validation auto des labels sentiment |
+| `fusion-training-daily` | 02h00 | Entraînement fusion apprenante |
+
+### Flows on-demand (event-driven)
+
+| Flow | Déclencheur | Description |
+|------|-------------|-------------|
+| `sentiment-on-demand` | Event `news.batch.available` | Analyse sentiment |
+| `strategy-on-demand` | Event `signal.generated` | Exécution trades |
+| `command-on-demand` | Event `hermes.command.received` | Traitement ordres |
+
+### Prefect UI
+
+http://localhost:4200
 
 ---
 

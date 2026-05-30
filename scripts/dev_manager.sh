@@ -109,18 +109,44 @@ cmd_start() {
         echo -e "  ${GRN}✓${NC} Listener lancé (PID: $(get_pid listener))"
     fi
 
+    # 5. Prefect Server
+    if is_running prefect-server; then
+        echo -e "  ${GRN}✓${NC} Prefect Server déjà lancé (PID: $(get_pid prefect-server))"
+    else
+        echo -e "  ${YEL}→${NC} Démarrage Prefect Server..."
+        cd "$PROJECT_DIR"
+        nohup uv run prefect server start > "$(log_file prefect-server)" 2>&1 &
+        echo $! > "$(pid_file prefect-server)"
+        sleep 5
+        echo -e "  ${GRN}✓${NC} Prefect Server lancé (PID: $(get_pid prefect-server))"
+    fi
+
+    # 6. Prefect Deploy (polling des deployments)
+    if is_running prefect-deploy; then
+        echo -e "  ${GRN}✓${NC} Prefect Deploy déjà lancé (PID: $(get_pid prefect-deploy))"
+    else
+        echo -e "  ${YEL}→${NC} Déploiement des flows Prefect..."
+        cd "$PROJECT_DIR"
+        export PREFECT_API_URL=http://localhost:4200/api
+        nohup uv run python -m trading.flows.deploy > "$(log_file prefect-deploy)" 2>&1 &
+        echo $! > "$(pid_file prefect-deploy)"
+        sleep 3
+        echo -e "  ${GRN}✓${NC} Prefect Deploy actif (PID: $(get_pid prefect-deploy))"
+    fi
+
     echo ""
     echo -e "${GRN}Services accessibles :${NC}"
     echo "  MCP Server   → http://localhost:8001/sse"
     echo "  API Docs     → http://localhost:8000/docs"
     echo "  API Health   → http://localhost:8000/health"
+    echo "  Prefect UI   → http://localhost:4200"
     echo ""
     echo -e "${YEL}Pour voir les logs :${NC} ./scripts/dev_manager.sh logs"
 }
 
 cmd_stop() {
     echo -e "${RED}▶ Arrêt des services...${NC}"
-    for svc in listener api-server mcp-server; do
+    for svc in prefect-deploy prefect-server listener api-server mcp-server; do
         if is_running "$svc"; then
             echo -e "  ${YEL}→${NC} Arrêt $svc (PID: $(get_pid $svc))..."
             kill_service "$svc"
@@ -142,7 +168,7 @@ cmd_status() {
         echo -e "  ${RED}●${NC} PostgreSQL    arrêté"
     fi
     # Services
-    for svc in mcp-server api-server listener; do
+    for svc in mcp-server api-server listener prefect-server prefect-deploy; do
         if is_running "$svc"; then
             echo -e "  ${GRN}●${NC} $svc    running (PID: $(get_pid $svc))"
         else
@@ -193,6 +219,15 @@ cmd_restart() {
             cd "$PROJECT_DIR"
             nohup uv run python scripts/run_listener.py > "$(log_file listener)" 2>&1 &
             ;;
+        prefect-server)
+            cd "$PROJECT_DIR"
+            nohup uv run prefect server start > "$(log_file prefect-server)" 2>&1 &
+            ;;
+        prefect-deploy)
+            cd "$PROJECT_DIR"
+            export PREFECT_API_URL=http://localhost:4200/api
+            nohup uv run python -m trading.flows.deploy > "$(log_file prefect-deploy)" 2>&1 &
+            ;;
         *)
             echo -e "${RED}Service inconnu: $svc${NC}"
             exit 1
@@ -231,7 +266,7 @@ case "${1:-}" in
         echo "Usage:"
         echo "  $0 start              Démarre tous les services"
         echo "  $0 stop               Arrête tous les services"
-        echo "  $0 restart <service>  Redémarre un service (mcp-server|api-server|listener)"
+        echo "  $0 restart <service>  Redémarre un service (mcp-server|api-server|listener|prefect-server|prefect-deploy)"
         echo "  $0 status             État des services"
         echo "  $0 logs [service]     Logs temps réel (service optionnel)"
         echo ""

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from trading.core.config import get_settings
-from trading.core.models import News, SentimentScore, Signal, SignalAction
+from trading.core.models import News, SentimentScore, Signal, SignalAction, MarketData
 from trading.sentiment.cloud_fallback import CloudFallback
 from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financial_keywords
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
@@ -395,6 +395,15 @@ class SentimentAnalyzerV2:
             text = f"{item.title}. {item.description or ''}"
             result = self.analyze_text(text)
 
+            # Récupère le dernier prix connu pour ce ticker (pour validation a posteriori)
+            latest_price = (
+                db.query(MarketData)
+                .filter(MarketData.ticker == item.ticker)
+                .order_by(MarketData.timestamp.desc())
+                .first()
+            )
+            price_at_analysis = latest_price.price if latest_price else None
+
             sentiment = SentimentScore(
                 news_id=item.id,
                 ticker=item.ticker,
@@ -417,6 +426,7 @@ class SentimentAnalyzerV2:
                 estimated_cost_usd=result.get("estimated_cost_usd", 0.0),
                 input_text=text,
                 predicted_label=_score_to_label(result["combined"]),
+                price_at_analysis=price_at_analysis,
                 pipeline_config_json=json.dumps(pipeline_config),
                 model_versions_json=json.dumps(model_versions),
             )
