@@ -440,6 +440,48 @@ Historique:
 
 ---
 
+## Configuration Kimi CLI (Local)
+
+Le projet expose un serveur MCP local que Kimi CLI peut utiliser pour interroger les données du trading engine.
+
+### Configuration
+
+Le fichier `.kimi/mcp.json` dans le projet contient la configuration MCP :
+
+```json
+{
+  "mcpServers": {
+    "trading-engine": {
+      "url": "http://localhost:8001/sse",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+### Tester la connexion
+
+```bash
+# Lister les serveurs MCP configurés
+kimi mcp list
+
+# Tester la connexion au serveur trading-engine
+kimi mcp test trading-engine
+
+# Lancer Kimi CLI avec le projet MCP
+kimi --mcp-config-file .kimi/mcp.json
+```
+
+### Tools disponibles dans Kimi CLI
+
+Une fois connecté, Kimi CLI a accès aux 15 tools du trading engine :
+`list_portfolios`, `get_positions`, `get_portfolio_details`, `get_trade_history`,
+`get_balance_history`, `get_signals`, `get_sentiment_scores`, `get_market_data`,
+`get_news`, `execute_sql_query`, `reserve_capital`, `release_capital`,
+`get_capital_movements`, `get_token_usage`, `get_audit_log`.
+
+---
+
 ## Contact & Support
 
 - **Projet** : `/home/brancwi/dev/projects/trading`
