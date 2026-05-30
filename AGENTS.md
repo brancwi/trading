@@ -315,4 +315,6 @@ Historique:
 - **Projet** : `/home/brancwi/dev/projects/trading`
 - **Prefect UI** : http://localhost:4200 (quand `prefect server start`)
 - **API Docs** : http://localhost:8000/docs (quand `python scripts/run_api.py`)
-- **Skills** : `.kimi/skills/prefect-trading/SKILL.md`
+- **Skills** :
+  - `.kimi/skills/prefect-mastery/SKILL.md` — Référence complète Prefect v3 (pur, générique)
+  - `.kimi/skills/prefect-trading/SKILL.md` — Connaissance Prefect spécifique au projet
