@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ML / Sentiment Engine
     ml_device: str = "cuda"
     ml_model_finbert: str = "ProsusAI/finbert"
-    ml_model_roberta: str = "mrm8488/distilroberta-finetuned-financial-news"
+    ml_model_roberta: str = "mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
     ml_model_modern: str = "tabularisai/ModernFinBERT"
     ml_model_qwen: str = "NOSIBLE/financial-sentiment-v1.1-base"
     ml_enable_qwen: bool = True

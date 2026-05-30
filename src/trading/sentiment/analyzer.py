@@ -1,6 +1,5 @@
 """Sentiment Engine v2 — analyse multi-modèles à 4 tiers avec arbitre LLM."""
 
-import concurrent.futures
 import json
 import logging
 import threading
@@ -127,7 +126,7 @@ class SentimentAnalyzerV2:
                 self._md_qwen = tr.AutoModelForCausalLM.from_pretrained(
                     self.qwen_name,
                     trust_remote_code=True,
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     device_map="auto",
                 ).eval()
                 logger.info("[SentimentV2] Qwen chargé (bfloat16=%s)", dtype == torch.bfloat16)
@@ -234,12 +233,9 @@ class SentimentAnalyzerV2:
                 logger.info(f"Lexical override: {lex.rule_name}/{lex.matched_keyword} → {lex.score_override:.2f}")
                 return result
 
-        # ---- Tier 1 & 2 : RoBERTa + ModernFinBERT en parallèle ----
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            fut_roberta = pool.submit(self._infer_roberta, text)
-            fut_modern = pool.submit(self._infer_modern, text)
-            roberta_score = fut_roberta.result()
-            modern_score = fut_modern.result()
+        # ---- Tier 1 & 2 : RoBERTa + ModernFinBERT (sequentiel pour eviter conflits CUDA) ----
+        roberta_score = self._infer_roberta(text)
+        modern_score = self._infer_modern(text)
 
         result["roberta_score"] = round(roberta_score, 4)
         result["modern_score"] = round(modern_score, 4)
