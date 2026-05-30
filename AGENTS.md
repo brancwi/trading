@@ -132,66 +132,54 @@ docker-compose down
 docker-compose down -v
 ```
 
-### Option B — Manuel (Développement)
+### Option B — Manuel (Développement) — Dev Manager
 
-#### 1. Initialiser la base
+Un script de gestion centralisée gère tous les services en local :
 
 ```bash
-python scripts/init_db.py
+# Lancer tous les services
+./scripts/dev_manager.sh start
+
+# Voir l'état
+./scripts/dev_manager.sh status
+
+# Logs temps réel (tous)
+./scripts/dev_manager.sh logs
+
+# Logs d'un service spécifique
+./scripts/dev_manager.sh logs mcp-server
+./scripts/dev_manager.sh logs api-server
+./scripts/dev_manager.sh logs listener
+
+# Redémarrer un service après modification
+./scripts/dev_manager.sh restart mcp-server
+./scripts/dev_manager.sh restart api-server
+./scripts/dev_manager.sh restart listener
+
+# Arrêter tout
+./scripts/dev_manager.sh stop
 ```
 
-Crée le schéma PostgreSQL + 3 portefeuilles (simulation: $3000, rotation: $3000, ninja: €500).
-
-#### 2. Démarrer PostgreSQL (Docker)
+#### Démarrage manuel (sans le manager)
 
 ```bash
-docker-compose up -d postgres
-```
+# 1. PostgreSQL (Docker)
+docker compose up -d postgres
 
-#### 3. Démarrer Prefect Server (UI)
-
-```bash
-prefect server start
-```
-→ UI accessible sur http://localhost:4200
-
-#### 4. Démarrer l'API FastAPI
-
-```bash
-python scripts/run_api.py
-```
-→ API sur http://localhost:8000/docs (Swagger)
-→ Clé API par défaut: `dev-secret-change-me` (header `x-api-key`)
-
-#### 5. Démarrer le MCP Server
-
-```bash
+# 2. MCP Server
 python scripts/run_mcp_server.py
-```
-→ MCP SSE sur http://localhost:8001/sse
+# → http://localhost:8001/sse
 
-#### 6. Démarrer le Listener (WebSocket + Polling)
+# 3. API FastAPI
+python scripts/run_api.py
+# → http://localhost:8000/docs
 
-```bash
+# 4. Listener
 python scripts/run_listener.py
-```
-→ Écoute Finnhub WebSocket (prix temps réel)
-→ Poll les news toutes les minutes
-→ Poll les commandes Hermes toutes les 30s
-→ Émet des Prefect Events
 
-#### 7. Créer les Deployments Prefect
-
-```bash
-python -m trading.flows.deploy
-```
-
-#### 8. Tester un flow manuellement
-
-```bash
-python -m trading.flows.ingestion_flow
-python -m trading.flows.sentiment_flow
-python -m trading.flows.strategy_flow --portfolio simulation
+# 5. Prefect Server (optionnel)
+prefect server start
+# → http://localhost:4200
 ```
 
 ### Option C — Docker uniquement (sans Compose)
