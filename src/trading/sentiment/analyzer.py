@@ -12,6 +12,7 @@ from trading.core.models import News, SentimentScore, Signal, SignalAction
 from trading.sentiment.cloud_fallback import CloudFallback
 from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financial_keywords
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
+from trading.sentiment.fusion_model import FusionModel
 from trading.monitoring.service import MonitorService
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,15 @@ def _label_to_score(label: str) -> float:
     if "negative" in label:
         return -1.0
     return 0.0
+
+
+def _score_to_label(score: float) -> str:
+    """Convertit un score numérique [-1, 1] en label texte."""
+    if score > 0.2:
+        return "positive"
+    if score < -0.2:
+        return "negative"
+    return "neutral"
 
 
 class SentimentAnalyzerV2:
@@ -83,6 +93,9 @@ class SentimentAnalyzerV2:
             provider=settings.ml_cloud_provider,
             model=settings.ml_cloud_model,
         )
+
+        # Fusion apprenante (poids appris sur human_label)
+        self._fusion = FusionModel()
 
         self._initialized = True
 
@@ -277,9 +290,9 @@ class SentimentAnalyzerV2:
         divergence = abs(roberta_score - modern_score)
         result["divergence"] = round(divergence, 4)
 
-        # ---- Pas de divergence → fusion simple 50/50 ----
+        # ---- Pas de divergence → fusion apprenante (ou 50/50 si non entraînée) ----
         if divergence <= settings.ml_divergence_threshold:
-            combined = 0.5 * roberta_score + 0.5 * modern_score
+            combined = self._fusion.predict(roberta_score, modern_score, None, result.get("lexical_score"))
             confidence = 1.0 - divergence  # plus la divergence est faible, plus on est confiant
             result["combined"] = round(combined, 4)
             result["confidence"] = round(confidence, 4)
@@ -343,8 +356,8 @@ class SentimentAnalyzerV2:
                 result["keywords"] = ",".join(extract_financial_keywords(text))
                 return result
 
-        # ---- Dernier recours : moyenne pondérée avec pénalité ----
-        combined = 0.5 * roberta_score + 0.5 * modern_score
+        # ---- Dernier recours : fusion apprenante avec pénalité ----
+        combined = self._fusion.predict(roberta_score, modern_score, result.get("qwen_score"), result.get("lexical_score"))
         confidence = max(0.3, 1.0 - divergence)  # confiance réduite
         result["combined"] = round(combined, 4)
         result["confidence"] = round(confidence, 4)
@@ -360,6 +373,23 @@ class SentimentAnalyzerV2:
         self.load_models()
         news_items = db.query(News).filter(News.processed == 0).all()
         signal_count = 0
+
+        # Config snapshot pour analyse a posteriori
+        pipeline_config = {
+            "divergence_threshold": settings.ml_divergence_threshold,
+            "signal_threshold": settings.ml_signal_threshold,
+            "confidence_threshold": settings.ml_confidence_threshold,
+            "lexical_override": settings.ml_lexical_override,
+            "enable_qwen": settings.ml_enable_qwen,
+            "enable_cloud_fallback": settings.ml_enable_cloud_fallback,
+        }
+        model_versions = {
+            "roberta": self.roberta_name,
+            "modern": self.modern_name,
+            "qwen": self.qwen_name if settings.ml_enable_qwen else None,
+            "cloud_provider": settings.ml_cloud_provider if settings.ml_enable_cloud_fallback else None,
+            "cloud_model": settings.ml_cloud_model if settings.ml_enable_cloud_fallback else None,
+        }
 
         for item in news_items:
             text = f"{item.title}. {item.description or ''}"
@@ -385,6 +415,10 @@ class SentimentAnalyzerV2:
                 input_tokens=result.get("input_tokens", 0),
                 output_tokens=result.get("output_tokens", 0),
                 estimated_cost_usd=result.get("estimated_cost_usd", 0.0),
+                input_text=text,
+                predicted_label=_score_to_label(result["combined"]),
+                pipeline_config_json=json.dumps(pipeline_config),
+                model_versions_json=json.dumps(model_versions),
             )
             db.add(sentiment)
             item.processed = 1

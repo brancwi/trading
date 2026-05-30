@@ -67,6 +67,12 @@ class SentimentScore(Base):
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
     estimated_cost_usd = Column(Float, default=0.0)
+    # --- Champs pour dataset d'entraînement et analyse a posteriori ---
+    input_text = Column(Text)  # Texte analysé (title + description)
+    predicted_label = Column(String)  # positive / neutral / negative
+    human_label = Column(String)  # Annotation manuelle (pour fine-tuning)
+    pipeline_config_json = Column(Text)  # Config au moment de l'analyse
+    model_versions_json = Column(Text)  # Versions des modèles utilisés
 
 
 class Signal(Base):
