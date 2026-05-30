@@ -38,7 +38,7 @@ mcp = FastMCP(
 
 def _to_dict(rows):
     """Convertit des lignes SQLAlchemy rowproxy en list[dict]."""
-    return [dict(r._mapping) for r in rows]
+    return [dict(r) for r in rows]
 
 
 def _json_serial(obj):
@@ -299,8 +299,8 @@ def reserve_capital(portfolio_id: str, amount: float, reason: str = "") -> dict:
         db.execute(
             text("""
                 INSERT INTO capital_movements
-                (portfolio_id, movement_type, amount, balance_after, reason, actor)
-                VALUES (:pid, 'reserve', :amount, :balance, :reason, 'hermes')
+                (portfolio_id, timestamp, movement_type, amount, balance_after, reason, actor)
+                VALUES (:pid, NOW(), 'reserve', :amount, :balance, :reason, 'hermes')
             """),
             {
                 "pid": portfolio_id,
@@ -346,8 +346,8 @@ def release_capital(portfolio_id: str, amount: float) -> dict:
         db.execute(
             text("""
                 INSERT INTO capital_movements
-                (portfolio_id, movement_type, amount, balance_after, reason, actor)
-                VALUES (:pid, 'release', :amount, :balance, 'Libération via MCP', 'hermes')
+                (portfolio_id, timestamp, movement_type, amount, balance_after, reason, actor)
+                VALUES (:pid, NOW(), 'release', :amount, :balance, 'Libération via MCP', 'hermes')
             """),
             {
                 "pid": portfolio_id,
