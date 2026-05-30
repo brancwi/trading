@@ -1,4 +1,4 @@
-# AGENTS.md — Trading Engine V4.2
+# AGENTS.md — Trading Engine v1.0
 
 ## Contexte & Objectif
 
@@ -435,7 +435,7 @@ git log --oneline
 ```
 
 Historique:
-- `77f4f02` feat(v4.1): architecture event-driven Prefect avec flows indépendants
+- `77f4f02` feat(v1.0): architecture event-driven Prefect avec flows indépendants
 - `45fdac4` feat(v4): architecture modulaire event-driven + API FastAPI
 
 ---

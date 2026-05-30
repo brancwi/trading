@@ -3382,7 +3382,7 @@ wheels = [
 
 [[package]]
 name = "trading-engine"
-version = "4.0.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },

@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Trading Engine API",
     description="Système de trading modulaire V4 - Event-driven + Command Bus",
-    version="4.0.0",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
@@ -43,4 +43,4 @@ app.include_router(monitoring.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "4.0.0"}
+    return {"status": "ok", "version": "1.0.0"}

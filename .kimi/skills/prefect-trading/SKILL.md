@@ -1,7 +1,7 @@
 ---
 name: prefect-trading
 description: >
-  Connaissance spécifique au projet Trading Engine V4.1 (orchestré par Prefect v3).
+  Connaissance spécifique au projet Trading Engine v1.0 (orchestré par Prefect v3).
 
   ACTIVE CE SKILL immédiatement quand l'utilisateur travaille dans ce répertoire
   et mentionne ou sous-entend :

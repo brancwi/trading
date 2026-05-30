@@ -1,5 +1,5 @@
 # ============================================================
-# Docker Compose — Trading Engine V4.2
+# Docker Compose — Trading Engine v1.0
 # Services : API, Listener, Prefect Server, Metabase, PostgreSQL
 # ============================================================
 

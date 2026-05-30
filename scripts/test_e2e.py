@@ -167,7 +167,7 @@ def cleanup() -> None:
 
 def main() -> int:
     print("=" * 60)
-    print("Trading Engine V4.2 — Test End-to-End")
+    print("Trading Engine v1.0 — Test End-to-End")
     print("=" * 60)
 
     try:
