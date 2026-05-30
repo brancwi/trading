@@ -93,6 +93,12 @@ class Portfolio(Base):
     cash_initial = Column(Float, nullable=False)
     cash_current = Column(Float, nullable=False)
     reserved_cash = Column(Float, default=0.0)
+
+    @property
+    def cash_available(self) -> float:
+        """Cash réellement disponible pour les trades (hors réserves)."""
+        return (self.cash_current or 0.0) - (self.reserved_cash or 0.0)
+
     max_trade_amount = Column(Float)
     fee_per_order = Column(Float, default=1.0)
     status = Column(String, default="active")

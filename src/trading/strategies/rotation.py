@@ -55,7 +55,7 @@ class RotationStrategy(StrategyBase):
                 continue
             price = prices[sig.ticker]
             max_trade = port.max_trade_amount or 600
-            if port.cash_current < max_trade + port.fee_per_order:
+            if port.cash_available < max_trade + port.fee_per_order:
                 continue
             qty = max_trade / price
             try:

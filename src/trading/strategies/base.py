@@ -55,8 +55,11 @@ class StrategyBase(ABC):
         amount = quantity * price
         fees = port.fee_per_order or 1.0
         total_cost = amount + fees
-        if port.cash_current < total_cost:
-            raise ValueError(f"Cash insuffisant: {port.cash_current} < {total_cost}")
+        if port.cash_available < total_cost:
+            raise ValueError(
+                f"Cash disponible insuffisant: {port.cash_available:.2f} < {total_cost:.2f} "
+                f"(réservé: {port.reserved_cash:.2f})"
+            )
         port.cash_current -= total_cost
         position = self.get_position(db, ticker)
         if position:

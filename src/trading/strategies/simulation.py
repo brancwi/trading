@@ -36,7 +36,7 @@ class SimulationStrategy(StrategyBase):
             if price <= 0:
                 continue
             # Montant du trade
-            trade_amount = min(max_trade, port.cash_current - cash_min)
+            trade_amount = min(max_trade, port.cash_available - cash_min)
             if trade_amount < cash_min:
                 continue
             qty = trade_amount / price
