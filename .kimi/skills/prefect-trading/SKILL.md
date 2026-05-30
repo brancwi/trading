@@ -1,3 +1,13 @@
+---
+name: prefect-trading
+description: >
+  Connaissance spécifique au projet Trading Engine V4.1 pour Prefect v3.
+  Utilise ce skill DÈS QUE tu travailles sur le système de trading dans ce répertoire :
+  flows Prefect, event-driven architecture, stratégies de trading, ingestion de données,
+  sentiment analysis, ou quand l'utilisateur mentionne "trading", "simulation", "rotation",
+  "ninja", "FinBERT", "command bus", "Hermes", ou veut modifier/ajouter un flow/stratégie.
+---
+
 # Skill: Prefect Trading Orchestration
 
 ## Contexte
