@@ -321,7 +321,8 @@ python scripts/run_listener.py
 - **`db_session()`** context manager pour transactions hors FastAPI
 - **`get_db()`** dependency pour FastAPI
 - **Thread-safe** : `SentimentAnalyzerV2` utilise un `threading.Lock()` pour le chargement GPU
-- **Sentiment Engine v2** : 4 tiers — lexical override → DistilRoBERTa + ModernFinBERT (parallèle) → Qwen arbitre (si divergence > 0.3) → cloud fallback (si Qwen incertain)
+- **Sentiment Engine v2** : 4 tiers — lexical override → DistilRoBERTa + ModernFinBERT (séquentiel) → Qwen arbitre (si divergence > 0.3) → cloud fallback (si Qwen incertain)
+- **Token Tracking** : comptage input/output tokens pour chaque appel Qwen / cloud, avec estimation de coût ($/call) sur GPT-4o-mini, Claude Haiku, etc. Stocké en DB pour analyse cumulée avant migration cloud
 - **8GB VRAM** : tous les modèles chargés simultanément (~1.9GB total), pas de batching (réactivité), pas de quantization (précision)
 
 ---
