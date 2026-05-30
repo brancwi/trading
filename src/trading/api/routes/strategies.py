@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from trading.api.dependencies import DbDep, AuthDep
 from trading.core.models import Portfolio, Command
 from trading.execution.commands import CommandProcessor
+from trading.events.emitters import emit_hermes_command_received
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 
@@ -40,6 +41,8 @@ def update_config(portfolio_id: str, payload: dict, db: Session = DbDep, _: str 
     )
     db.add(cmd)
     db.commit()
+    db.refresh(cmd)
+    emit_hermes_command_received(cmd.id, cmd.command_type, cmd.portfolio_id)
     processor = CommandProcessor(db)
     processor.process_pending()
     return {"status": "updated", "config": payload}

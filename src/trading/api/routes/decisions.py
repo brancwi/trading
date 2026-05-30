@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from trading.api.dependencies import DbDep, AuthDep
 from trading.core.models import Signal, Command, Trade, DecisionCreate
 from trading.execution.commands import CommandProcessor
+from trading.events.emitters import emit_hermes_command_received, emit_signal_generated
 
 router = APIRouter(prefix="/decisions", tags=["decisions"])
 
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/decisions", tags=["decisions"])
 def inject_decision(decision: DecisionCreate, db: Session = DbDep, _: str = AuthDep):
     """
     Hermes injecte une décision manuelle ou un override IA.
-    Crée un signal + une commande de trade en file.
+    Crée un signal + une commande de trade en file, puis émet un Prefect Event.
     """
     # 1. Créer le signal
     signal = Signal(
@@ -32,6 +33,7 @@ def inject_decision(decision: DecisionCreate, db: Session = DbDep, _: str = Auth
     db.add(signal)
     db.commit()
     db.refresh(signal)
+    emit_signal_generated(signal.id, signal.ticker, signal.action, signal.sentiment)
 
     # 2. Créer la commande de trade
     cmd = Command(
@@ -40,7 +42,7 @@ def inject_decision(decision: DecisionCreate, db: Session = DbDep, _: str = Auth
         payload=json.dumps({
             "ticker": decision.ticker,
             "quantity": decision.amount or 0,
-            "price": 0,  # sera résolu au moment de l'exécution
+            "price": 0,
             "reason": decision.reason,
             "signal_id": signal.id,
         }),
@@ -48,6 +50,8 @@ def inject_decision(decision: DecisionCreate, db: Session = DbDep, _: str = Auth
     )
     db.add(cmd)
     db.commit()
+    db.refresh(cmd)
+    emit_hermes_command_received(cmd.id, cmd.command_type, cmd.portfolio_id)
 
     return {
         "signal_id": signal.id,

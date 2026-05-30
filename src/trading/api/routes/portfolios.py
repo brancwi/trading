@@ -8,6 +8,7 @@ from sqlalchemy import text
 from trading.api.dependencies import DbDep, AuthDep
 from trading.core.models import Portfolio, PortfolioHistory, Position, Trade, PortfolioRead, PortfolioSummary, Command, CommandCreate
 from trading.execution.commands import CommandProcessor
+from trading.events.emitters import emit_hermes_command_received
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
@@ -80,11 +81,12 @@ def get_history(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
 
 @router.post("/{portfolio_id}/liquidate")
 def liquidate_portfolio(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
-    """Met en file une liquidation complète."""
+    """Met en file une liquidation complète et émet un event."""
     cmd = Command(command_type="LIQUIDATE", portfolio_id=portfolio_id, requested_by="hermes")
     db.add(cmd)
     db.commit()
-    # Traitement immédiat (optionnel)
+    db.refresh(cmd)
+    emit_hermes_command_received(cmd.id, cmd.command_type, cmd.portfolio_id)
     processor = CommandProcessor(db)
     processor.process_pending()
     return {"status": "liquidating", "command_id": cmd.id}
@@ -95,6 +97,8 @@ def pause_portfolio(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
     cmd = Command(command_type="PAUSE", portfolio_id=portfolio_id, requested_by="hermes")
     db.add(cmd)
     db.commit()
+    db.refresh(cmd)
+    emit_hermes_command_received(cmd.id, cmd.command_type, cmd.portfolio_id)
     processor = CommandProcessor(db)
     processor.process_pending()
     return {"status": "paused", "command_id": cmd.id}
@@ -105,6 +109,8 @@ def resume_portfolio(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
     cmd = Command(command_type="RESUME", portfolio_id=portfolio_id, requested_by="hermes")
     db.add(cmd)
     db.commit()
+    db.refresh(cmd)
+    emit_hermes_command_received(cmd.id, cmd.command_type, cmd.portfolio_id)
     processor = CommandProcessor(db)
     processor.process_pending()
     return {"status": "active", "command_id": cmd.id}

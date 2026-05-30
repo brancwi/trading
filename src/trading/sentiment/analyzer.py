@@ -2,7 +2,7 @@
 
 import json
 import logging
-import os
+import threading
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ settings = get_settings()
 # Lazy import des modèles pour éviter le chargement au démarrage API
 _transformers: Any = None
 _torch: Any = None
+_model_lock = threading.Lock()
 
 
 def _load_transformers():
@@ -52,21 +53,24 @@ class SentimentAnalyzer:
         self._initialized = True
 
     def load_models(self):
-        """Charge les modèles en VRAM (appel explicite requis)."""
+        """Charge les modèles en VRAM (appel explicite requis, thread-safe)."""
         if self.model_fb is not None:
             return
-        transformers, torch = _load_transformers()
-        logger.info("Chargement FinancialBERT...")
-        self.tokenizer_fb = transformers.AutoTokenizer.from_pretrained(self.finbert_name)
-        self.model_fb = transformers.AutoModelForSequenceClassification.from_pretrained(
-            self.finbert_name
-        ).to(self.device).eval()
-        logger.info("Chargement RoBERTa...")
-        self.tokenizer_rb = transformers.AutoTokenizer.from_pretrained(self.roberta_name)
-        self.model_rb = transformers.AutoModelForSequenceClassification.from_pretrained(
-            self.roberta_name
-        ).to(self.device).eval()
-        logger.info("Modèles chargés en VRAM")
+        with _model_lock:
+            if self.model_fb is not None:
+                return
+            transformers, torch = _load_transformers()
+            logger.info("Chargement FinancialBERT...")
+            self.tokenizer_fb = transformers.AutoTokenizer.from_pretrained(self.finbert_name)
+            self.model_fb = transformers.AutoModelForSequenceClassification.from_pretrained(
+                self.finbert_name
+            ).to(self.device).eval()
+            logger.info("Chargement RoBERTa...")
+            self.tokenizer_rb = transformers.AutoTokenizer.from_pretrained(self.roberta_name)
+            self.model_rb = transformers.AutoModelForSequenceClassification.from_pretrained(
+                self.roberta_name
+            ).to(self.device).eval()
+            logger.info("Modèles chargés en VRAM")
 
     def _infer(self, text: str, tokenizer, model) -> float:
         transformers, torch = _load_transformers()
