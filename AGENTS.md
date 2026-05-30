@@ -2,7 +2,7 @@
 
 ## Contexte & Objectif
 
-Système de **simulation de trading algorithmique multi-stratégies** avec analyse de sentiment ML (FinancialBERT + RoBERTa), orchestré par **Prefect v3** en architecture **event-driven**.
+Système de **simulation de trading algorithmique multi-stratégies** avec analyse de sentiment ML multi-tier (DistilRoBERTa + ModernFinBERT + Qwen3-0.6B + fallback cloud), orchestré par **Prefect v3** en architecture **event-driven**.
 
 Le système est conçu pour être piloté par **Hermes** (assistant IA) via une **API FastAPI**, sans que Hermes n'exécute directement le code métier.
 
@@ -51,7 +51,9 @@ trading/
 │   ├── ingestion/
 │   │   └── collector.py          # Finnhub REST fetcher
 │   ├── sentiment/
-│   │   └── analyzer.py           # FinBERT + RoBERTa (thread-safe)
+│   │   ├── analyzer.py           # SentimentAnalyzerV2 — 4 tiers
+│   │   ├── lexical_rules.py      # Override par mots-clés financiers
+│   │   └── cloud_fallback.py     # Fallback GPT-4/Claude API
 │   ├── strategies/
 │   │   ├── base.py               # StrategyBase ABC
 │   │   ├── simulation.py         # Day-trading sur signaux
@@ -218,7 +220,7 @@ DATABASE_URL=sqlite:///data/trading.db
 |-------|----------|-----------|
 | `market.price.updated` | EventListener | `strategy_execution_flow` |
 | `news.batch.available` | EventListener | `sentiment_analysis_flow` |
-| `signal.generated` | SentimentAnalyzer | `strategy_execution_flow` |
+| `signal.generated` | SentimentAnalyzerV2 | `strategy_execution_flow` |
 | `hermes.command.received` | API routes | `command_processing_flow` |
 | `portfolio.updated` | StrategyBase | `metrics_flow`, `notifications_flow` |
 | `trade.executed` | StrategyBase | — (log only) |
@@ -318,7 +320,9 @@ python scripts/run_listener.py
 - **Lazy loading** des modèles ML (ne pas charger au démarrage API)
 - **`db_session()`** context manager pour transactions hors FastAPI
 - **`get_db()`** dependency pour FastAPI
-- **Thread-safe** : `SentimentAnalyzer` utilise un `threading.Lock()` pour le chargement GPU
+- **Thread-safe** : `SentimentAnalyzerV2` utilise un `threading.Lock()` pour le chargement GPU
+- **Sentiment Engine v2** : 4 tiers — lexical override → DistilRoBERTa + ModernFinBERT (parallèle) → Qwen arbitre (si divergence > 0.3) → cloud fallback (si Qwen incertain)
+- **8GB VRAM** : tous les modèles chargés simultanément (~1.9GB total), pas de batching (réactivité), pas de quantization (précision)
 
 ---
 

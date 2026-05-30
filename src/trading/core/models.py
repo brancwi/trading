@@ -47,12 +47,23 @@ class SentimentScore(Base):
     news_id = Column(Integer, ForeignKey("news.id"), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     ticker = Column(String, nullable=False, index=True)
+    # Legacy — gardé pour rétro-compatibilité
     finbert_score = Column(Float)
     roberta_score = Column(Float)
+    # Nouveaux scores multi-modèles v2
+    modern_score = Column(Float)
+    qwen_score = Column(Float)
+    cloud_score = Column(Float)
+    lexical_score = Column(Float)
+    lexical_rule = Column(String)
+    # Score final et métadonnées
     combined_score = Column(Float, nullable=False)
     confidence = Column(Float)
+    divergence = Column(Float)
     keywords = Column(Text)
     anomaly_flag = Column(Integer, default=0)
+    qwen_arbitrated = Column(Integer, default=0)
+    cloud_fallback_used = Column(Integer, default=0)
 
 
 class Signal(Base):

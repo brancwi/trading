@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # API Keys
     finnhub_api_key: str = ""
     alpha_vantage_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
 
     # Telegram
     telegram_bot_token: str = ""
@@ -35,10 +37,20 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_key: str = "dev-secret-change-me"
 
-    # ML
+    # ML / Sentiment Engine
     ml_device: str = "cuda"
     ml_model_finbert: str = "ProsusAI/finbert"
-    ml_model_roberta: str = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+    ml_model_roberta: str = "mrm8488/distilroberta-finetuned-financial-news"
+    ml_model_modern: str = "tabularisai/ModernFinBERT"
+    ml_model_qwen: str = "NOSIBLE/financial-sentiment-v1.1-base"
+    ml_enable_qwen: bool = True
+    ml_enable_cloud_fallback: bool = False
+    ml_cloud_provider: str = "openai"
+    ml_cloud_model: str = "gpt-4o-mini"
+    ml_lexical_override: bool = True
+    ml_divergence_threshold: float = 0.3
+    ml_signal_threshold: float = 0.5
+    ml_confidence_threshold: float = 0.6
 
     # Pipeline
     pipeline_interval_minutes: int = 5
