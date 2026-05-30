@@ -71,6 +71,13 @@ class SentimentScore(Base):
     input_text = Column(Text)  # Texte analysé (title + description)
     predicted_label = Column(String)  # positive / neutral / negative
     human_label = Column(String)  # Annotation manuelle (pour fine-tuning)
+    # --- Validation a posteriori (automatique) ---
+    validated_label = Column(String)  # Label validé par le marché (auto)
+    validated_at = Column(DateTime)
+    validation_method = Column(String, default="market_price")
+    price_at_analysis = Column(Float)
+    price_at_validation = Column(Float)
+    price_change_pct = Column(Float)
     pipeline_config_json = Column(Text)  # Config au moment de l'analyse
     model_versions_json = Column(Text)  # Versions des modèles utilisés
 

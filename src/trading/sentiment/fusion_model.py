@@ -79,7 +79,10 @@ class FusionModel:
         with db_session() as db:
             rows = (
                 db.query(SentimentScore)
-                .filter(SentimentScore.human_label.isnot(None))
+                .filter(
+                    (SentimentScore.human_label.isnot(None)) |
+                    (SentimentScore.validated_label.isnot(None))
+                )
                 .all()
             )
 
@@ -101,7 +104,8 @@ class FusionModel:
                 1.0,  # biais
             ]
             X.append(features)
-            y.append(_label_to_score(r.human_label))
+            label = r.human_label or r.validated_label or "neutral"
+            y.append(_label_to_score(label))
 
         X_arr = np.array(X)
         y_arr = np.array(y)
