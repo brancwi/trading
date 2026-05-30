@@ -91,7 +91,35 @@ cd /home/brancwi/dev/projects/trading
 source .venv/bin/activate
 ```
 
-### 1. Initialiser la base
+### Option A — Docker Compose (Recommandé)
+
+```bash
+# 1. Lancer tous les services
+docker-compose up -d
+
+# 2. Vérifier que tout est up
+docker-compose ps
+
+# 3. Accéder aux services
+# API FastAPI  → http://localhost:8000/docs
+# Prefect UI   → http://localhost:4200
+# Metabase     → http://localhost:3000
+
+# 4. Voir les logs
+docker-compose logs -f trading-api
+docker-compose logs -f trading-listener
+docker-compose logs -f prefect-server
+
+# 5. Arrêter
+docker-compose down
+
+# 6. Reset complet (DB + volumes)
+docker-compose down -v
+```
+
+### Option B — Manuel (Développement)
+
+#### 1. Initialiser la base
 
 ```bash
 python scripts/init_db.py
@@ -99,14 +127,14 @@ python scripts/init_db.py
 
 Crée `data/trading.db` + 3 portefeuilles (simulation: $3000, rotation: $3000, ninja: €500).
 
-### 2. Démarrer Prefect Server (UI)
+#### 2. Démarrer Prefect Server (UI)
 
 ```bash
 prefect server start
 ```
 → UI accessible sur http://localhost:4200
 
-### 3. Démarrer l'API FastAPI
+#### 3. Démarrer l'API FastAPI
 
 ```bash
 python scripts/run_api.py
@@ -114,7 +142,7 @@ python scripts/run_api.py
 → API sur http://localhost:8000/docs (Swagger)
 → Clé API par défaut: `dev-secret-change-me` (header `x-api-key`)
 
-### 4. Démarrer le Listener (WebSocket + Polling)
+#### 4. Démarrer le Listener (WebSocket + Polling)
 
 ```bash
 python scripts/run_listener.py
@@ -124,18 +152,37 @@ python scripts/run_listener.py
 → Poll les commandes Hermes toutes les 30s
 → Émet des Prefect Events
 
-### 5. Créer les Deployments Prefect
+#### 5. Créer les Deployments Prefect
 
 ```bash
 python -m trading.flows.deploy
 ```
 
-### 6. Tester un flow manuellement
+#### 6. Tester un flow manuellement
 
 ```bash
 python -m trading.flows.ingestion_flow
 python -m trading.flows.sentiment_flow
 python -m trading.flows.strategy_flow --portfolio simulation
+```
+
+### Option C — Docker uniquement (sans Compose)
+
+```bash
+# Build
+docker build -t trading-engine .
+
+# Run API
+docker run -d -p 8000:8000 -v trading-data:/app/data --env-file .env trading-engine
+
+# Run Listener
+docker run -d -v trading-data:/app/data --env-file .env trading-engine python scripts/run_listener.py
+
+# Run Prefect Server
+docker run -d -p 4200:4200 prefecthq/prefect:3-latest prefect server start --host 0.0.0.0
+
+# Run Metabase
+docker run -d -p 3000:3000 -v metabase-data:/metabase-data metabase/metabase
 ```
 
 ---

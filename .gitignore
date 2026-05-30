@@ -20,6 +20,10 @@ secrets/
 .idea/
 *.swp
 
+# Docker
+.dockerignore
+docker-compose.override.yml
+
 # Logs
 *.log
 logs/
