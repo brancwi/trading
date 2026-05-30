@@ -383,6 +383,13 @@ python scripts/run_listener.py
 curl http://localhost:8001/sse
 ```
 
+### Test end-to-end
+
+```bash
+# Valide MCP, capital movements, stratégies cash_available
+python scripts/test_e2e.py
+```
+
 ---
 
 ## Conventions de Code
