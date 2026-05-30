@@ -12,6 +12,7 @@ from trading.flows.metrics_flow import metrics_flow
 from trading.flows.notifications_flow import notifications_flow
 from trading.flows.validation_flow import validation_flow
 from trading.flows.fusion_training_flow import fusion_training_flow
+from trading.flows.signal_training_flow import signal_training_flow
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ if __name__ == "__main__":
         notifications_flow.to_deployment(name="notifications-daily", cron="0 20 * * *"),
         validation_flow.to_deployment(name="validation-every-4h", interval=14400),
         fusion_training_flow.to_deployment(name="fusion-training-daily", cron="0 2 * * *"),
+        signal_training_flow.to_deployment(name="signal-training-daily", cron="0 3 * * *"),
         # Deployments sans schedule (event-driven / on-demand)
         sentiment_analysis_flow.to_deployment(name="sentiment-on-demand"),
         strategy_execution_flow.to_deployment(name="strategy-on-demand"),

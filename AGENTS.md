@@ -457,6 +457,29 @@ Tous les flows sont déployés automatiquement au démarrage via `dev_manager.sh
 | `notifications-daily` | 20h00 | Notifications Telegram |
 | `validation-every-4h` | Toutes les 4h | Validation auto des labels sentiment |
 | `fusion-training-daily` | 02h00 | Entraînement fusion apprenante |
+| `signal-training-daily` | 03h00 | Entraînement SignalModel v1 (Random Forest) |
+
+### SignalModel v1 — Modèle de décision ML
+
+Le SignalModel est un **Random Forest** entraîné sur :
+- **Features techniques** : SMA 10/20, RSI 14, momentum 5/10, Bollinger Band Width, volume moyen
+- **Features sentiment** : score combiné, confiance, divergence
+- **Label** : hausse/baisse du prix à T+4h (depuis `validated_label` ou calculé à la volée)
+
+**Intégration** : la stratégie `simulation` utilise le SignalModel comme filtre quand il est entraîné :
+- Si ML prédit `HOLD` ou `SELL` → ignore le signal d'achat sentiment
+- Si ML prédit `BUY` → suit le signal normal
+
+**Fichiers clés** :
+- `src/trading/ml/features.py` — Feature engineering
+- `src/trading/ml/signal_model.py` — Random Forest + entraînement
+- `src/trading/ml/backtest.py` — Métriques financières (Sharpe, Drawdown, Profit Factor)
+- `src/trading/flows/signal_training_flow.py` — Flow Prefect d'entraînement
+
+**Métriques financières calculées** :
+- Sharpe Ratio, Max Drawdown, Profit Factor, Expectancy, Win Rate
+
+---
 
 ### Flows on-demand (event-driven)
 

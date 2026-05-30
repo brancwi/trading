@@ -26,6 +26,7 @@ dependencies = [
     "rich>=13.7",
     "websockets>=12.0",
     "aiohttp>=3.9",
+    "scikit-learn>=1.8.0",
 ]
 
 [project.optional-dependencies]
