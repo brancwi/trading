@@ -12,6 +12,7 @@ from trading.core.models import News, SentimentScore, Signal, SignalAction
 from trading.sentiment.cloud_fallback import CloudFallback
 from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financial_keywords
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
+from trading.monitoring.service import MonitorService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -206,6 +207,18 @@ class SentimentAnalyzerV2:
         )
         tracker.record(cloud_usage)
 
+        # Audit DB
+        monitor = MonitorService()
+        monitor.log_token_usage(
+            model=self.qwen_name,
+            provider="local",
+            input_tokens=input_tokens,
+            output_tokens=1,
+            cost_usd=cloud_usage.estimated_cost_usd,
+            text=text,
+            triggered_by="qwen_arbitration",
+        )
+
         logger.debug(
             f"Qwen arbitre → '{gen_text}' (score={score:.2f}, conf={confidence:.2f}, "
             f"tokens_in={input_tokens}, est_cost_cloud=${cloud_usage.estimated_cost_usd:.6f})"
@@ -310,6 +323,19 @@ class SentimentAnalyzerV2:
                     model=settings.ml_cloud_model,
                 )
                 result["estimated_cost_usd"] = cu.estimated_cost_usd
+
+                # Audit DB
+                monitor = MonitorService()
+                monitor.log_token_usage(
+                    model=settings.ml_cloud_model,
+                    provider=settings.ml_cloud_provider,
+                    input_tokens=result["input_tokens"],
+                    output_tokens=result["output_tokens"],
+                    cost_usd=cu.estimated_cost_usd,
+                    text=text,
+                    triggered_by="cloud_fallback",
+                )
+
                 combined = cloud_res["score"]
                 confidence = cloud_res["confidence"] * 0.9  # pénalité légère cloud
                 result["combined"] = round(combined, 4)

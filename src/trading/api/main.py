@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from trading.core.config import get_settings
 from trading.core.database import init_db
-from trading.api.routes import status, portfolios, strategies, decisions
+from trading.api.routes import status, portfolios, strategies, decisions, monitoring
 
 settings = get_settings()
 
@@ -38,6 +38,7 @@ app.include_router(status.router)
 app.include_router(portfolios.router)
 app.include_router(strategies.router)
 app.include_router(decisions.router)
+app.include_router(monitoring.router)
 
 
 @app.get("/health")

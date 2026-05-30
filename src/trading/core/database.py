@@ -32,6 +32,8 @@ Base = declarative_base()
 
 def init_db() -> None:
     """Crée toutes les tables définies dans les modèles ORM."""
+    # Import explicite pour s'assurer que tous les modèles sont enregistrés dans Base.metadata
+    import trading.core.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
 

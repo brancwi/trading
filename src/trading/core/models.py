@@ -178,6 +178,52 @@ class Alert(Base):
 
 
 # =====================================================================
+# Monitoring & Audit Tables
+# =====================================================================
+
+class MonitoringMetric(Base):
+    """Métriques time-series pour le monitoring du système."""
+
+    __tablename__ = "monitoring_metrics"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    metric_name = Column(String, nullable=False, index=True)
+    value = Column(Float, nullable=False)
+    unit = Column(String)
+    source = Column(String, default="system")  # ex: sentiment, strategy, ingestion
+    tags_json = Column(Text)  # JSON: {"portfolio_id": "simulation", "ticker": "AAPL"}
+
+
+class AuditLog(Base):
+    """Journal d'audit de toutes les actions significatives."""
+
+    __tablename__ = "audit_log"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    event_type = Column(String, nullable=False, index=True)  # SIGNAL_CREATED, TRADE_EXECUTED, COMMAND_RECEIVED, etc.
+    entity_type = Column(String)  # portfolio, signal, trade, command
+    entity_id = Column(String)
+    actor = Column(String, default="system")  # hermes, system, sentiment_engine
+    details_json = Column(Text)  # payload JSON contextuel
+    severity = Column(String, default="info")  # debug, info, warning, error, critical
+
+
+class TokenUsageLog(Base):
+    """Consommation tokens par inférence (local + cloud)."""
+
+    __tablename__ = "token_usage_log"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    model = Column(String, nullable=False)
+    provider = Column(String, nullable=False)  # local, openai, anthropic
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cost_usd = Column(Float, default=0.0)
+    text_hash = Column(String)  # hash du texte analysé (anonymisation)
+    triggered_by = Column(String, default="qwen_arbitration")  # qwen, cloud_fallback
+
+
+# =====================================================================
 # Pydantic Schemas (API)
 # =====================================================================
 
