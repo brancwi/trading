@@ -1,11 +1,35 @@
 ---
 name: prefect-trading
 description: >
-  Connaissance spécifique au projet Trading Engine V4.1 pour Prefect v3.
-  Utilise ce skill DÈS QUE tu travailles sur le système de trading dans ce répertoire :
-  flows Prefect, event-driven architecture, stratégies de trading, ingestion de données,
-  sentiment analysis, ou quand l'utilisateur mentionne "trading", "simulation", "rotation",
-  "ninja", "FinBERT", "command bus", "Hermes", ou veut modifier/ajouter un flow/stratégie.
+  Connaissance spécifique au projet Trading Engine V4.1 (orchestré par Prefect v3).
+
+  ACTIVE CE SKILL immédiatement quand l'utilisateur travaille dans ce répertoire
+  et mentionne ou sous-entend :
+  - trading, simulation, rotation, ninja, day trading, sector rotation
+  - portfolio, portefeuille, position, trade, PnL, drawdown
+  - strategy, stratégie, backtest, signal, sentiment analysis
+  - FinBERT, RoBERTa, FinancialBERT, NLP, sentiment score
+  - Finnhub, market data, prix temps réel, websocket, news ingestion
+  - Hermes, command bus, commande, liquidation, pause, resume
+  - event-driven trading, trading flow, trading pipeline
+  - Telegram, notification de trade, alerte de signal
+  - ajouter une stratégie, modifier un flow, nouveau portefeuille
+  - DB trading, SQLite, table signals, table trades
+  - Metabase, dashboard trading, métriques de performance
+
+  ACTIVE aussi quand l'utilisateur :
+  - veut tester/debug un flow du système de trading
+  - demande comment relancer le listener ou l'API
+  - parle de simulation de trading algorithmique
+  - mentionne "mon système de trading" ou "mon bot de trading"
+  - veut configurer les clés API (Finnhub, Telegram)
+
+  NE PAS activer si :
+  - l'utilisateur parle de Prefect en général sans lien avec ce projet
+    (utiliser prefect-mastery à la place)
+  - c'est une question purement financière sans lien au code
+  - le contexte est un autre projet de trading (pas celui-ci)
+  - c'est une question sur FastAPI/Metabase général sans lien Prefect/trading
 ---
 
 # Skill: Prefect Trading Orchestration

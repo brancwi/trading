@@ -1,12 +1,34 @@
 ---
 name: prefect-mastery
 description: >
-  Référence complète pour construire des applications avec Prefect v3.
-  Utilise ce skill DÈS QUE l'utilisateur mentionne : orchestration de workflows,
-  pipeline Python, scheduling, retry, caching, concurrence, event-driven,
-  ETL, data pipeline, ou veut remplacer Airflow/Cron/Celery.
-  Couvre flows, tasks, events, automations, deployments, work pools,
-  interactive workflows, caching, et patterns de production.
+  Référence complète pour construire, déployer et débugger des applications
+  avec Prefect v3 (orchestrateur de workflows Python).
+
+  ACTIVE CE SKILL immédiatement quand l'utilisateur mentionne ou sous-entend :
+  - Prefect, @flow, @task, flow.run(), deployment, serve(), deploy()
+  - orchestration de workflows, workflow engine, pipeline automation
+  - scheduling, cron, interval, timer, job scheduler
+  - retry, cache, concurrence, parallélisme, async tasks
+  - event-driven, webhook trigger, automation rule, emit_event
+  - ETL, data pipeline, batch processing, workflow DAG
+  - remplacer Airflow, Celery, Cron, Rundeck, Luigi
+  - work pool, worker, infrastructure dynamique, Docker/K8s deployment
+  - human-in-the-loop, pause workflow, interactive approval
+  - Prefect UI, Prefect Cloud, Prefect Server, MCP server
+
+  ACTIVE aussi quand l'utilisateur :
+  - veut exécuter des tâches en parallèle avec Python
+  - cherche comment gérer retry/caching nativement
+  - demande un scheduler Python avec UI
+  - veut connecter un webhook à un workflow Python
+  - a besoin d'observabilité sur des scripts Python (logs, états, UI)
+  - mentionne "scheduler pour mon script Python" ou "task runner"
+
+  NE PAS activer si :
+  - l'utilisateur parle uniquement de FastAPI/Flask/Django sans orchestration
+  - c'est une question purement SQL/DB sans workflow
+  - le contexte est uniquement le projet trading (utiliser prefect-trading à la place)
+  - c'est une question sur Docker/K8s général sans lien Prefect
 ---
 
 # Prefect Mastery — Skill Référence v3
