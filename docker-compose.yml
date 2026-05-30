@@ -3,8 +3,6 @@
 # Services : API, Listener, Prefect Server, Metabase, PostgreSQL
 # ============================================================
 
-version: "3.9"
-
 services:
   # --------------------------------------------------------
   # 1. PostgreSQL — Base de données principale
@@ -117,6 +115,12 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/sse"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # --------------------------------------------------------
   # 5. Prefect Server — Orchestration UI + API
