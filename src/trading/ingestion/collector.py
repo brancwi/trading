@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from trading.core.config import get_settings
 from trading.core.models import News, MarketData
-from trading.monitoring.message_logger import MessageLogger
+from trading.monitoring.service import MonitorService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -93,9 +93,10 @@ class MarketDataCollector:
         except Exception as e:
             logger.error(f"Erreur Finnhub general news: {e}")
 
-        MessageLogger.log(
+        MonitorService.log_event(
             channel="news_finnhub",
             source="finnhub",
+            payload=all_articles,
             metadata={
                 "article_count": len(all_articles),
                 "tickers": tickers,
@@ -119,9 +120,10 @@ class MarketDataCollector:
                 prices[ticker] = data.get("c", 0.0)
             except Exception as e:
                 logger.error(f"Erreur prix {ticker}: {e}")
-        MessageLogger.log(
-            channel="news_finnhub",
+        MonitorService.log_event(
+            channel="prices_finnhub",
             source="finnhub.quote",
+            payload=prices,
             metadata={
                 "price_count": len(prices),
                 "tickers_requested": len(tickers),

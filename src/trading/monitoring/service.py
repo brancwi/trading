@@ -328,6 +328,7 @@ class MonitorService:
         metadata_json: str | None = None,
         processed: int = 0,
         processing_time_ms: float | None = None,
+        payload: str | None = None,
     ) -> None:
         """Persist a message trace to the monitoring DB."""
         try:
@@ -336,6 +337,7 @@ class MonitorService:
                     channel=channel,
                     source=source,
                     content_hash=content_hash,
+                    payload=payload,
                     metadata_json=metadata_json,
                     processed=processed,
                     processing_time_ms=processing_time_ms,
@@ -343,6 +345,35 @@ class MonitorService:
                 db.add(entry)
         except Exception as e:
             logger.warning("[MonitorService] Failed to log message: %s", e)
+
+    @staticmethod
+    def log_event(
+        channel: str,
+        source: str,
+        payload: dict | list | str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Log a raw incoming event directly into the time-series DB.
+
+        Replaces the old MessageLogger abstraction — every piece of data
+        that enters the system is stored with its full payload for later
+        analysis, backtesting, and model training.
+        """
+        try:
+            payload_str = json.dumps(payload, default=str, ensure_ascii=False) if payload else None
+            meta_str = json.dumps(metadata, default=str, ensure_ascii=False) if metadata else None
+            with monitoring_session() as db:
+                entry = MessageLog(
+                    channel=channel,
+                    source=source,
+                    content_hash=hashlib.sha256(payload_str.encode()).hexdigest() if payload_str else None,
+                    payload=payload_str,
+                    metadata_json=meta_str,
+                    processed=0,
+                )
+                db.add(entry)
+        except Exception as e:
+            logger.warning("[MonitorService] Failed to log event: %s", e)
 
     @staticmethod
     def log_performance(

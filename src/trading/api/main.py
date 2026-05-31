@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from trading.core.config import get_settings
 from trading.core.database import init_db
 from trading.monitoring.database import init_monitoring_db
-from trading.monitoring.message_logger import MessageLogger
+from trading.monitoring.service import MonitorService
 from trading.api.routes import status, portfolios, strategies, decisions, monitoring
 
 settings = get_settings()
@@ -45,7 +45,7 @@ async def log_requests(request, call_next):
     start = perf_counter()
     response = await call_next(request)
     duration_ms = round((perf_counter() - start) * 1000, 2)
-    MessageLogger.log(
+    MonitorService.log_event(
         channel="api_rest",
         source=f"{request.method} {request.url.path}",
         metadata={

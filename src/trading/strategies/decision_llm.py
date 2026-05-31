@@ -29,7 +29,7 @@ from trading.core.config import get_settings
 from trading.core.models import Portfolio, Signal
 from trading.ml.features import FeatureEngine
 from trading.monitoring.decorator import trace_llm_call
-from trading.monitoring.message_logger import MessageLogger
+
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 
 logger = logging.getLogger(__name__)
@@ -366,9 +366,10 @@ class DecisionLLM:
             return []
 
         # Log incoming signals
-        MessageLogger.log(
-            channel="system",
+        MonitorService.log_event(
+            channel="decision_llm_input",
             source="decision_llm.decide",
+            payload=[{"ticker": s.ticker, "action": s.action, "sentiment": s.sentiment} for s in signals],
             metadata={
                 "portfolio_id": portfolio.id,
                 "signal_count": len(signals),
@@ -427,9 +428,10 @@ class DecisionLLM:
             valid.append(d)
 
         # Log outgoing decisions
-        MessageLogger.log(
-            channel="system",
+        MonitorService.log_event(
+            channel="decision_llm_output",
             source=f"decision_llm.decide.{backend}",
+            payload=valid,
             metadata={
                 "portfolio_id": portfolio.id,
                 "duration_ms": duration_ms,

@@ -14,7 +14,6 @@ from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financi
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 from trading.sentiment.fusion_model import FusionModel
 from trading.monitoring.decorator import trace_llm_call
-from trading.monitoring.message_logger import MessageLogger
 from trading.monitoring.service import MonitorService
 
 logger = logging.getLogger(__name__)

@@ -63,6 +63,9 @@ class MessageLog(MonitoringBase):
     # Content (hashed for privacy)
     content_hash = Column(String)
 
+    # Raw payload (JSON) — stores the actual incoming data for time-series analysis
+    payload = Column(Text)
+
     # Flexible metadata
     metadata_json = Column(Text)
 
