@@ -29,10 +29,10 @@ def fetch_and_store_prices(tickers: list[str]) -> dict[str, float]:
 
 
 @task(retries=3, retry_delay_seconds=10)
-def fetch_and_store_news() -> int:
-    """Récupère et stocke les news."""
+def fetch_and_store_news(tickers: list[str] | None = None) -> int:
+    """Récupère et stocke les news (company-news par ticker + générales mappées)."""
     collector = MarketDataCollector()
-    articles = collector.fetch_news_finnhub()
+    articles = collector.fetch_news_finnhub(tickers=tickers)
     with db_session() as db:
         count = collector.store_news(db, articles)
     if count > 0:

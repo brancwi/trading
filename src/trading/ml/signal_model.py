@@ -91,47 +91,47 @@ class SignalModel:
                 .all()
             )
 
-        X_rows = []
-        y_rows = []
+            X_rows = []
+            y_rows = []
 
-        for score in scores:
-            # Features techniques au moment de l'analyse
-            tech = engine.compute(score.ticker)
-            if not tech or tech.get("sma_10") is None:
-                continue
-
-            # Features sentiment
-            sentiment_combined = score.combined_score or 0.0
-            sentiment_confidence = score.confidence or 0.0
-            sentiment_divergence = score.divergence or 0.0
-
-            # Label : variation du prix à T+window_hours
-            # Si validated_label existe, on l'utilise
-            if score.validated_label is not None:
-                label = _label_from_price_change(score.price_change_pct or 0, threshold=1.0)
-            else:
-                # Sinon on calcule à la volée
-                price_t = score.price_at_analysis
-                price_t_plus = self._get_price_at(score.ticker, score.timestamp, offset_hours=window_hours)
-                if price_t_plus is None or price_t is None or price_t == 0:
+            for score in scores:
+                # Features techniques au moment de l'analyse
+                tech = engine.compute(score.ticker)
+                if not tech or tech.get("sma_10") is None:
                     continue
-                change_pct = ((price_t_plus - price_t) / price_t) * 100
-                label = _label_from_price_change(change_pct, threshold=1.0)
 
-            row = [
-                tech.get("sma_10", 0.0),
-                tech.get("sma_20", 0.0),
-                tech.get("rsi_14", 50.0),
-                tech.get("momentum_5", 0.0),
-                tech.get("momentum_10", 0.0),
-                tech.get("bb_width_20", 0.0),
-                tech.get("volume_avg_10", 0.0),
-                sentiment_combined,
-                sentiment_confidence,
-                sentiment_divergence,
-            ]
-            X_rows.append(row)
-            y_rows.append(label)
+                # Features sentiment
+                sentiment_combined = score.combined_score or 0.0
+                sentiment_confidence = score.confidence or 0.0
+                sentiment_divergence = score.divergence or 0.0
+
+                # Label : variation du prix à T+window_hours
+                # Si validated_label existe, on l'utilise
+                if score.validated_label is not None:
+                    label = _label_from_price_change(score.price_change_pct or 0, threshold=1.0)
+                else:
+                    # Sinon on calcule à la volée
+                    price_t = score.price_at_analysis
+                    price_t_plus = self._get_price_at(score.ticker, score.timestamp, offset_hours=window_hours)
+                    if price_t_plus is None or price_t is None or price_t == 0:
+                        continue
+                    change_pct = ((price_t_plus - price_t) / price_t) * 100
+                    label = _label_from_price_change(change_pct, threshold=1.0)
+
+                row = [
+                    tech.get("sma_10", 0.0),
+                    tech.get("sma_20", 0.0),
+                    tech.get("rsi_14", 50.0),
+                    tech.get("momentum_5", 0.0),
+                    tech.get("momentum_10", 0.0),
+                    tech.get("bb_width_20", 0.0),
+                    tech.get("volume_avg_10", 0.0),
+                    sentiment_combined,
+                    sentiment_confidence,
+                    sentiment_divergence,
+                ]
+                X_rows.append(row)
+                y_rows.append(label)
 
         if len(X_rows) < min_samples:
             logger.warning("[SignalModel] Pas assez d'échantillons: %d < %d", len(X_rows), min_samples)

@@ -13,6 +13,8 @@ from trading.sentiment.cloud_fallback import CloudFallback
 from trading.sentiment.lexical_rules import apply_lexical_rules, extract_financial_keywords
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 from trading.sentiment.fusion_model import FusionModel
+from trading.monitoring.decorator import trace_llm_call
+from trading.monitoring.message_logger import MessageLogger
 from trading.monitoring.service import MonitorService
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,7 @@ class SentimentAnalyzerV2:
     def _infer_modern(self, text: str) -> float:
         return self._infer_classifier(text, self._tk_modern, self._md_modern, self._label_map_modern)
 
+    @trace_llm_call(model="Qwen3-0.6B", provider="local", backend="local", triggered_by="sentiment_qwen")
     def _infer_qwen(self, text: str) -> tuple[float, float, TokenUsage]:
         """Inférence Qwen3-0.6B causal. Retourne (score, confidence, token_usage)."""
         tr, torch = _load_ml_libs()
@@ -319,7 +322,9 @@ class SentimentAnalyzerV2:
             return result
 
         # ---- Tier 4 : Qwen incertain → fallback cloud ----
-        if settings.ml_enable_cloud_fallback and self._cloud.enabled:
+        # En staging/prod → cloud fallback activé automatiquement
+        enable_cloud = settings.use_cloud_llm or settings.ml_enable_cloud_fallback
+        if enable_cloud and self._cloud.enabled:
             logger.info("Qwen uncertain → calling cloud fallback")
             cloud_res = self._cloud.analyze(text)
             if cloud_res:
@@ -375,20 +380,21 @@ class SentimentAnalyzerV2:
         signal_count = 0
 
         # Config snapshot pour analyse a posteriori
+        enable_cloud = settings.use_cloud_llm or settings.ml_enable_cloud_fallback
         pipeline_config = {
             "divergence_threshold": settings.ml_divergence_threshold,
             "signal_threshold": settings.ml_signal_threshold,
             "confidence_threshold": settings.ml_confidence_threshold,
             "lexical_override": settings.ml_lexical_override,
             "enable_qwen": settings.ml_enable_qwen,
-            "enable_cloud_fallback": settings.ml_enable_cloud_fallback,
+            "enable_cloud_fallback": enable_cloud,
         }
         model_versions = {
             "roberta": self.roberta_name,
             "modern": self.modern_name,
             "qwen": self.qwen_name if settings.ml_enable_qwen else None,
-            "cloud_provider": settings.ml_cloud_provider if settings.ml_enable_cloud_fallback else None,
-            "cloud_model": settings.ml_cloud_model if settings.ml_enable_cloud_fallback else None,
+            "cloud_provider": settings.ml_cloud_provider if enable_cloud else None,
+            "cloud_model": settings.ml_cloud_model if enable_cloud else None,
         }
 
         for item in news_items:

@@ -110,3 +110,88 @@ def push_metric(
     """Permet à Hermes de pousser une métrique personnalisée."""
     monitor.record_metric(name=name, value=value, unit=unit, source=source, tags=tags)
     return {"status": "recorded", "metric": name, "value": value}
+
+
+# ==================================================================
+# NEW — Monitoring DB endpoints (LLM calls, messages, performance)
+# ==================================================================
+
+@router.get("/llm-calls", dependencies=[Depends(verify_api_key)])
+def get_llm_calls(
+    hours: int = Query(24, ge=1, le=720),
+    provider: str | None = Query(None),
+    model: str | None = Query(None),
+    portfolio_id: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Liste détaillée des appels LLM récents."""
+    return {
+        "llm_calls": monitor.get_llm_calls(
+            hours=hours,
+            provider=provider,
+            model=model,
+            portfolio_id=portfolio_id,
+            limit=limit,
+        )
+    }
+
+
+@router.get("/llm-calls/summary", dependencies=[Depends(verify_api_key)])
+def get_llm_calls_summary(hours: int = Query(24, ge=1, le=720)):
+    """Agrégations des appels LLM (coût, tokens, durée)."""
+    return monitor.get_llm_summary(hours=hours)
+
+
+@router.get("/llm-calls/timeseries", dependencies=[Depends(verify_api_key)])
+def get_llm_timeseries(
+    hours: int = Query(24, ge=1, le=720),
+    interval: str = Query("1 hour"),
+):
+    """Séries temporelles bucketisées des appels LLM (optimisé TimescaleDB)."""
+    return {
+        "interval": interval,
+        "data": monitor.get_time_series(
+            metric_name="llm_call",
+            interval=interval,
+            hours=hours,
+        ),
+    }
+
+
+@router.get("/messages", dependencies=[Depends(verify_api_key)])
+def get_messages(
+    hours: int = Query(24, ge=1, le=720),
+    channel: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Messages entrants par canal."""
+    return {
+        "messages": monitor.get_messages(
+            channel=channel,
+            hours=hours,
+            limit=limit,
+        )
+    }
+
+
+@router.get("/messages/channels", dependencies=[Depends(verify_api_key)])
+def get_message_channels():
+    """Canaux actifs avec statistiques (24h)."""
+    return {"channels": monitor.get_message_channels()}
+
+
+@router.get("/performance", dependencies=[Depends(verify_api_key)])
+def get_performance(
+    hours: int = Query(24, ge=1, le=720),
+    metric_name: str | None = Query(None),
+):
+    """Métriques de performance (latence, throughput)."""
+    # Reuse existing metrics summary but filter by performance-related names
+    summary = monitor.get_metrics_summary(hours=hours)
+    performance_names = {"inference_latency", "pipeline_duration", "api_response_time"}
+    metrics = summary.get("metrics", [])
+    if metric_name:
+        metrics = [m for m in metrics if m["name"] == metric_name]
+    else:
+        metrics = [m for m in metrics if m["name"] in performance_names]
+    return {"period_hours": hours, "metrics": metrics}

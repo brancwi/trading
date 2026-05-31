@@ -260,6 +260,11 @@ case "${1:-}" in
     logs|log)
         cmd_logs "${2:-}"
         ;;
+    test)
+        echo -e "${GRN}▶ Exécution de la suite de tests...${NC}"
+        cd "$PROJECT_DIR"
+        TRADING_ENVIRONMENT=testing uv run pytest tests/ -v --tb=short
+        ;;
     *)
         echo "Dev Manager — Trading Engine V4.2"
         echo ""
@@ -269,6 +274,7 @@ case "${1:-}" in
         echo "  $0 restart <service>  Redémarre un service (mcp-server|api-server|listener|prefect-server|prefect-deploy)"
         echo "  $0 status             État des services"
         echo "  $0 logs [service]     Logs temps réel (service optionnel)"
+        echo "  $0 test               Exécute la suite de tests (pytest)"
         echo ""
         ;;
 esac

@@ -21,16 +21,16 @@ def _get_prices_and_volumes(ticker: str, limit: int = 100) -> dict[str, Any]:
             .limit(limit)
             .all()
         )
-    if not rows:
-        return {}
-    rows = list(reversed(rows))  # chronologique
-    return {
-        "timestamps": [r.timestamp for r in rows],
-        "prices": np.array([r.price for r in rows], dtype=float),
-        "volumes": np.array([r.volume or 0 for r in rows], dtype=float),
-        "highs": np.array([r.high or r.price for r in rows], dtype=float),
-        "lows": np.array([r.low or r.price for r in rows], dtype=float),
-    }
+        if not rows:
+            return {}
+        rows = list(reversed(rows))  # chronologique
+        return {
+            "timestamps": [r.timestamp for r in rows],
+            "prices": np.array([r.price for r in rows], dtype=float),
+            "volumes": np.array([r.volume or 0 for r in rows], dtype=float),
+            "highs": np.array([r.high or r.price for r in rows], dtype=float),
+            "lows": np.array([r.low or r.price for r in rows], dtype=float),
+        }
 
 
 def sma(prices: np.ndarray, window: int) -> float | None:

@@ -6,6 +6,8 @@ import os
 
 import httpx
 
+from trading.monitoring.decorator import trace_llm_call
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -132,6 +134,7 @@ class CloudFallback:
             logger.warning(f"Failed to parse cloud response: {e}")
             return None
 
+    @trace_llm_call(backend="cloud", triggered_by="sentiment_cloud_fallback")
     def analyze(self, text: str) -> dict | None:
         """Analyse un texte via API cloud. Retourne dict ou None si échec/indisponible."""
         if not self.enabled:

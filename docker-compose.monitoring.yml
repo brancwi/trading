@@ -1,0 +1,68 @@
+# ============================================================
+# Docker Compose — Monitoring Stack (TimescaleDB + Grafana)
+# Usage: docker compose -f docker-compose.monitoring.yml up -d
+# ============================================================
+
+services:
+  # --------------------------------------------------------
+  # 1. TimescaleDB — Time-series database for monitoring
+  # --------------------------------------------------------
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: trading-timescaledb
+    environment:
+      POSTGRES_USER: monitoring
+      POSTGRES_PASSWORD: ${MONITORING_DB_PASSWORD:-monitoring_pass}
+      POSTGRES_DB: trading_monitoring
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    ports:
+      - "10003:5432"
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitoring"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --------------------------------------------------------
+  # 2. Grafana — Pre-configured dashboards
+  # --------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: trading-grafana
+    ports:
+      - "10004:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:10004
+      - GF_INSTALL_PLUGINS=
+    networks:
+      - trading-network
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+# --------------------------------------------------------
+# Volumes
+# --------------------------------------------------------
+volumes:
+  timescaledb-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# --------------------------------------------------------
+# Networks — reuse the main trading network
+# --------------------------------------------------------
+networks:
+  trading-network:
+    external: true

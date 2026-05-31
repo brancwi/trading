@@ -1,0 +1,16 @@
+{
+  "feature_cols": [
+    "sma_10",
+    "sma_20",
+    "rsi_14",
+    "momentum_5",
+    "momentum_10",
+    "bb_width_20",
+    "volume_avg_10",
+    "sentiment_combined",
+    "sentiment_confidence",
+    "sentiment_divergence"
+  ],
+  "trained": true,
+  "model_type": "RandomForestClassifier"
+}

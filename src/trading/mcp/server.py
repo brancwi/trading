@@ -10,18 +10,20 @@ Usage:
 
 import json
 import os
+import socket
 from datetime import datetime, timedelta
 
 from mcp.server.fastmcp import FastMCP
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from trading.core.config import get_settings
+from trading.core.database import engine as _engine
+from trading.monitoring.message_logger import MessageLogger
+from trading.monitoring.service import MonitorService
 
 settings = get_settings()
 
-# Connexion PostgreSQL (ou SQLite fallback)
-_engine = create_engine(settings.database_url, pool_pre_ping=True)
 _Session = sessionmaker(bind=_engine)
 
 # ------------------------------------------------------------------
@@ -107,7 +109,7 @@ def get_portfolio_details(portfolio_id: str) -> dict:
         ).mappings().all()
 
         return {
-            "portfolio": dict(portfolio._mapping),
+            "portfolio": dict(portfolio),
             "positions": _to_dict(positions),
             "recent_trades": _to_dict(trades),
         }
@@ -300,10 +302,11 @@ def reserve_capital(portfolio_id: str, amount: float, reason: str = "") -> dict:
             text("""
                 INSERT INTO capital_movements
                 (portfolio_id, timestamp, movement_type, amount, balance_after, reason, actor)
-                VALUES (:pid, NOW(), 'reserve', :amount, :balance, :reason, 'hermes')
+                VALUES (:pid, :ts, 'reserve', :amount, :balance, :reason, 'hermes')
             """),
             {
                 "pid": portfolio_id,
+                "ts": datetime.utcnow(),
                 "amount": amount,
                 "balance": cash_current - new_reserved,
                 "reason": reason or "Mise de côté via MCP",
@@ -347,10 +350,11 @@ def release_capital(portfolio_id: str, amount: float) -> dict:
             text("""
                 INSERT INTO capital_movements
                 (portfolio_id, timestamp, movement_type, amount, balance_after, reason, actor)
-                VALUES (:pid, NOW(), 'release', :amount, :balance, 'Libération via MCP', 'hermes')
+                VALUES (:pid, :ts, 'release', :amount, :balance, 'Libération via MCP', 'hermes')
             """),
             {
                 "pid": portfolio_id,
+                "ts": datetime.utcnow(),
                 "amount": amount,
                 "balance": cash_current - new_reserved,
             },
@@ -431,3 +435,184 @@ def get_audit_log(hours: int = 24, event_type: str | None = None) -> list[dict]:
 
         rows = db.execute(text(query), params).mappings().all()
         return json.loads(json.dumps(_to_dict(rows), default=_json_serial))
+
+
+@mcp.tool()
+def get_system_status() -> dict:
+    """Diagnostic système complet — détecte les blocages de config, DB, services."""
+    db_url = settings.database_url
+    db_type = "postgresql" if db_url.startswith("postgresql") else "sqlite" if db_url.startswith("sqlite") else "unknown"
+
+    # DB version
+    try:
+        with _Session() as db:
+            if db_type == "postgresql":
+                db_version = db.execute(text("SELECT version()")).scalar()
+            else:
+                db_version = db.execute(text("SELECT sqlite_version()")).scalar()
+    except Exception as e:
+        db_version = f"error: {e}"
+
+    # Service health checks
+    services = {
+        "api": {"status": "up", "version": "1.0.0"},
+        "postgres": {"status": "up" if db_type == "postgresql" else "n/a"},
+        "mcp_server": {"status": _check_port(8001)},
+        "prefect_server": {"status": _check_port(4200)},
+    }
+
+    # Recent errors
+    since = datetime.utcnow() - timedelta(hours=1)
+    try:
+        with _Session() as db:
+            recent_errors = (
+                db.execute(
+                    text("""
+                        SELECT COUNT(*) FROM audit_log
+                        WHERE severity IN ('error', 'critical')
+                        AND timestamp >= :since
+                    """),
+                    {"since": since},
+                ).scalar()
+                or 0
+            )
+    except Exception:
+        recent_errors = 0
+
+    # Log MCP tool invocation
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_system_status",
+        metadata={"db_type": db_type, "services": services},
+    )
+
+    return {
+        "environment": settings.environment,
+        "database": {
+            "type": db_type,
+            "version": str(db_version) if db_version else "unknown",
+            "url_masked": _mask_db_url(db_url),
+        },
+        "services": services,
+        "config_summary": {
+            "ml_device": settings.ml_device,
+            "ml_models": {
+                "roberta": settings.ml_model_roberta,
+                "modern": settings.ml_model_modern,
+                "qwen": settings.ml_model_qwen,
+            },
+            "market_hours": f"{settings.market_open_hour}h-{settings.market_close_hour}h",
+            "pipeline_interval_minutes": settings.pipeline_interval_minutes,
+        },
+        "recent_errors_last_1h": recent_errors,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+# ------------------------------------------------------------------
+# NEW — Monitoring tools (Hermes queries)
+# ------------------------------------------------------------------
+
+@mcp.tool()
+def get_llm_calls(
+    hours: int = 24,
+    provider: str | None = None,
+    model: str | None = None,
+    portfolio_id: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Liste détaillée des appels LLM récents depuis la DB monitoring."""
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_llm_calls",
+        metadata={"hours": hours, "provider": provider, "model": model},
+    )
+    return MonitorService().get_llm_calls(
+        hours=hours,
+        provider=provider,
+        model=model,
+        portfolio_id=portfolio_id,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def get_llm_summary(hours: int = 24) -> dict:
+    """Agrégations des appels LLM (coût, tokens, durée moyenne)."""
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_llm_summary",
+        metadata={"hours": hours},
+    )
+    return MonitorService().get_llm_summary(hours=hours)
+
+
+@mcp.tool()
+def get_messages(
+    channel: str | None = None,
+    hours: int = 24,
+    limit: int = 100,
+) -> list[dict]:
+    """Messages entrants par canal depuis la DB monitoring."""
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_messages",
+        metadata={"channel": channel, "hours": hours},
+    )
+    return MonitorService().get_messages(
+        channel=channel,
+        hours=hours,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def get_message_channels() -> list[dict]:
+    """Canaux actifs avec statistiques (24h)."""
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_message_channels",
+    )
+    return MonitorService().get_message_channels()
+
+
+@mcp.tool()
+def get_performance_metrics(
+    metric_name: str | None = None,
+    hours: int = 24,
+) -> dict:
+    """Métriques de performance (latence, throughput) depuis la DB monitoring."""
+    MessageLogger.log(
+        channel="mcp_tool",
+        source="mcp.get_performance_metrics",
+        metadata={"metric_name": metric_name, "hours": hours},
+    )
+    summary = MonitorService().get_metrics_summary(hours=hours)
+    performance_names = {"inference_latency", "pipeline_duration", "api_response_time"}
+    metrics = summary.get("metrics", [])
+    if metric_name:
+        metrics = [m for m in metrics if m["name"] == metric_name]
+    else:
+        metrics = [m for m in metrics if m["name"] in performance_names]
+    return {"period_hours": hours, "metrics": metrics}
+
+
+def _check_port(port: int, host: str = "127.0.0.1") -> str:
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return "up"
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return "down"
+
+
+def _mask_db_url(url: str) -> str:
+    """Masque le mot de passe dans une URL de DB."""
+    try:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(url)
+        if parsed.password:
+            netloc = parsed.netloc.replace(f":{parsed.password}@", ":***@")
+            parsed = parsed._replace(netloc=netloc)
+        return urlunparse(parsed)
+    except Exception:
+        return "masked"

@@ -27,8 +27,9 @@ if __name__ == "__main__":
         validation_flow.to_deployment(name="validation-every-4h", interval=14400),
         fusion_training_flow.to_deployment(name="fusion-training-daily", cron="0 2 * * *"),
         signal_training_flow.to_deployment(name="signal-training-daily", cron="0 3 * * *"),
+        # Deployments avec schedule court (boucle de trading)
+        sentiment_analysis_flow.to_deployment(name="sentiment-every-5min", interval=300),
+        strategy_execution_flow.to_deployment(name="strategy-every-5min", interval=300),
         # Deployments sans schedule (event-driven / on-demand)
-        sentiment_analysis_flow.to_deployment(name="sentiment-on-demand"),
-        strategy_execution_flow.to_deployment(name="strategy-on-demand"),
         command_processing_flow.to_deployment(name="command-on-demand"),
     )

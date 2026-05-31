@@ -107,12 +107,9 @@ class EventListener:
                 logger.error(f"News polling erreur: {e}")
 
     async def _fetch_news(self) -> list[dict]:
-        url = "https://finnhub.io/api/v1/news"
-        params = {"category": "general", "token": self.finnhub_key}
-        async with self.http.get(url, params=params) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-            return data if isinstance(data, list) else []
+        collector = MarketDataCollector()
+        # Utilise le même collector que l'ingestion flow (company-news + general mappé)
+        return collector.fetch_news_finnhub(tickers=TICKERS)
 
     # ------------------------------------------------------------------
     # Polling — commandes Hermes en attente

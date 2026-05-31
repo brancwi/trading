@@ -27,14 +27,28 @@ dependencies = [
     "websockets>=12.0",
     "aiohttp>=3.9",
     "scikit-learn>=1.8.0",
+    "bitsandbytes>=0.49.2",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "httpx>=0.27",
     "ruff>=0.4",
     "mypy>=1.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "unit: tests unitaires rapides (défaut)",
+    "integration: tests d'intégration avec DB",
+    "e2e: tests end-to-end complets",
+    "slow: tests lents (ex: entraînement ML)",
 ]
 
 [tool.hatch.build.targets.wheel]
