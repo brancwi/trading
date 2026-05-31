@@ -27,16 +27,19 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 
 # Hyperparamètres spécifiques par type de portefeuille
-# Ninja (petit capital) : moins de trades, plus conservateur
-# Simulation/Rotation (gros capital) : plus agressif
+# Ninja (500€) : AGGRESSIF — cherche à multiplier le capital rapidement
+# Rotation (3000€) : ÉQUILIBRÉ — rotation sectorielle classique
+# Simulation (3000€) : CONSERVATEUR — capital préservé, croissance lente
 PORTFOLIO_HYPERPARAMS = {
     "ninja": {
-        "n_estimators": 150,
-        "max_depth": 3,
-        "learning_rate": 0.05,
-        "subsample": 0.7,
-        "colsample_bytree": 0.7,
+        "n_estimators": 300,
+        "max_depth": 7,
+        "learning_rate": 0.15,
+        "subsample": 0.6,       # plus de bruit = moins d'overfitting sur données brutes
+        "colsample_bytree": 0.6,
         "slippage_pct": 0.002,  # plus de slippage sur petits ordres
+        "confidence_threshold": 0.55,  # ne trade que sur signaux forts
+        "fee_per_order": 0.5,    # broker à bas coût pour petits comptes
     },
     "rotation": {
         "n_estimators": 200,
@@ -45,14 +48,18 @@ PORTFOLIO_HYPERPARAMS = {
         "subsample": 0.8,
         "colsample_bytree": 0.8,
         "slippage_pct": 0.001,
+        "confidence_threshold": 0.0,
+        "fee_per_order": 1.0,
     },
     "simulation": {
-        "n_estimators": 250,
-        "max_depth": 6,
-        "learning_rate": 0.1,
-        "subsample": 0.85,
-        "colsample_bytree": 0.85,
+        "n_estimators": 150,
+        "max_depth": 4,
+        "learning_rate": 0.08,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
         "slippage_pct": 0.001,
+        "confidence_threshold": 0.0,
+        "fee_per_order": 1.0,
     },
 }
 
@@ -108,10 +115,12 @@ def run_for_portfolio(
     backtest = backtest_strategy(
         df_test,
         result["y_pred"],
+        y_proba=result.get("y_proba"),
         initial_capital=portfolio.cash_initial,
-        fee_per_order=portfolio.fee_per_order or 1.0,
+        fee_per_order=hyper.get("fee_per_order", portfolio.fee_per_order or 1.0),
         base_currency=portfolio.base_currency,
         slippage_pct=hyper["slippage_pct"],
+        confidence_threshold=hyper.get("confidence_threshold", 0.0),
     )
     result["backtest"] = backtest
     result["portfolio_id"] = portfolio.id

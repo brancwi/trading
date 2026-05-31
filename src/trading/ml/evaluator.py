@@ -35,19 +35,23 @@ def evaluate_classifier(y_true: np.ndarray, y_pred: np.ndarray, label_names: lis
 def backtest_strategy(
     df: pd.DataFrame,
     y_pred: np.ndarray,
+    y_proba: np.ndarray | None = None,
     initial_capital: float = 10_000.0,
     fee_per_order: float = 1.0,
     base_currency: str = "USD",
     slippage_pct: float = 0.001,
+    confidence_threshold: float = 0.0,
 ) -> dict[str, Any]:
     """Simule un portefeuille qui achète sur BUY, vend sur SELL, hold sinon.
 
     Args:
         df: DataFrame avec colonnes [close, future_return, label]
         y_pred: Prédictions du modèle (0=HOLD, 1=BUY, 2=SELL)
+        y_proba: Probabilités du modèle (N, 3) — utilisées pour filtrer par confiance
         initial_capital: Capital initial du portfolio
         fee_per_order: Frais fixe par ordre (ex: 1.0 EUR/USD)
         base_currency: Devise du portfolio (pour l'affichage)
+        confidence_threshold: Seuil de confiance minimum pour trader (0=tous, 0.6=forts)
 
     Returns:
         Dict avec métriques financières
@@ -61,6 +65,12 @@ def backtest_strategy(
     for i in range(len(df)):
         price = df.iloc[i]["close"]
         pred = y_pred[i]
+
+        # Filtre par confiance : si y_proba fourni, on ignore les signaux faibles
+        if y_proba is not None and confidence_threshold > 0:
+            max_proba = float(y_proba[i].max())
+            if max_proba < confidence_threshold:
+                pred = 0  # FORCER HOLD si confiance insuffisante
 
         # Slippage : on achète plus cher, on vend moins cher
         buy_price = price * (1 + slippage_pct)
