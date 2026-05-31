@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Prefect Server (port local du UI/API Prefect)
     prefect_port: int = 4200
 
+    # FX — taux de change pour la conversion des prix USD en devise du portfolio
+    fx_eur_usd: float = 1.08  # 1 EUR = 1.08 USD
+
     # Ports par environnement (créneau 10xxx pour staging/prod)
     # Dev utilise le créneau 8xxx par défaut (pas de conflit avec autres projets)
     staging_base_port: int = 10000
