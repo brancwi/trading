@@ -36,15 +36,17 @@ def backtest_strategy(
     df: pd.DataFrame,
     y_pred: np.ndarray,
     initial_capital: float = 10_000.0,
-    transaction_cost_pct: float = 0.001,
+    fee_per_order: float = 1.0,
+    base_currency: str = "USD",
 ) -> dict[str, Any]:
     """Simule un portefeuille qui achète sur BUY, vend sur SELL, hold sinon.
 
     Args:
         df: DataFrame avec colonnes [close, future_return, label]
         y_pred: Prédictions du modèle (0=HOLD, 1=BUY, 2=SELL)
-        initial_capital: Capital initial
-        transaction_cost_pct: Coût de transaction (0.1%)
+        initial_capital: Capital initial du portfolio
+        fee_per_order: Frais fixe par ordre (ex: 1.0 EUR/USD)
+        base_currency: Devise du portfolio (pour l'affichage)
 
     Returns:
         Dict avec métriques financières
@@ -53,20 +55,26 @@ def backtest_strategy(
     position = 0.0  # nombre d'actions détenues
     portfolio_values = [initial_capital]
     trades = 0
+    total_fees = 0.0
 
     for i in range(len(df)):
         price = df.iloc[i]["close"]
         pred = y_pred[i]
 
-        if pred == 1 and capital > 0:  # BUY
-            shares = capital * (1 - transaction_cost_pct) / price
+        if pred == 1 and capital > fee_per_order:  # BUY
+            invest = capital - fee_per_order
+            shares = invest / price
             position += shares
             capital = 0.0
+            total_fees += fee_per_order
             trades += 1
         elif pred == 2 and position > 0:  # SELL
-            capital = position * price * (1 - transaction_cost_pct)
-            position = 0.0
-            trades += 1
+            proceeds = position * price - fee_per_order
+            if proceeds > 0:
+                capital = proceeds
+                position = 0.0
+                total_fees += fee_per_order
+                trades += 1
 
         # Valeur du portfolio = cash + positions
         current_value = capital + position * price
@@ -86,12 +94,15 @@ def backtest_strategy(
 
     metrics = {
         "initial_capital": round(initial_capital, 2),
+        "base_currency": base_currency,
         "final_value": round(final_value, 2),
         "total_return_pct": round(total_return * 100, 2),
         "sharpe_ratio": round(sharpe, 4),
         "max_drawdown_pct": round(max_drawdown * 100, 2),
         "trades_executed": trades,
+        "total_fees": round(total_fees, 2),
         "avg_trade_return_pct": round(total_return / max(trades, 1) * 100, 4),
+        "fee_impact_pct": round(total_fees / initial_capital * 100, 2),
     }
     return metrics
 
@@ -123,13 +134,16 @@ def print_report(result: dict[str, Any], df: pd.DataFrame) -> None:
     # Backtest
     if "backtest" in result:
         b = result["backtest"]
-        print(f"\n💰 Backtest Simulation:")
-        print(f"   Capital initial : ${b['initial_capital']:,.2f}")
-        print(f"   Capital final   : ${b['final_value']:,.2f}")
+        curr = b.get("base_currency", "USD")
+        print(f"\n💰 Backtest Simulation ({b['initial_capital']:.0f} {curr}):")
+        print(f"   Capital initial : {b['initial_capital']:,.2f} {curr}")
+        print(f"   Capital final   : {b['final_value']:,.2f} {curr}")
         print(f"   Rendement total : {b['total_return_pct']:+.2f}%")
         print(f"   Sharpe ratio    : {b['sharpe_ratio']:.4f}")
         print(f"   Max drawdown    : {b['max_drawdown_pct']:.2f}%")
         print(f"   Trades exécutés : {b['trades_executed']}")
+        print(f"   Frais totaux    : {b.get('total_fees', 0):.2f} {curr}")
+        print(f"   Impact frais    : {b.get('fee_impact_pct', 0):.2f}%")
 
     # Feature importance (XGBoost)
     if "feature_importance" in result:
