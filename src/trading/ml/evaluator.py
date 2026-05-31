@@ -38,6 +38,7 @@ def backtest_strategy(
     initial_capital: float = 10_000.0,
     fee_per_order: float = 1.0,
     base_currency: str = "USD",
+    slippage_pct: float = 0.001,
 ) -> dict[str, Any]:
     """Simule un portefeuille qui achète sur BUY, vend sur SELL, hold sinon.
 
@@ -61,15 +62,19 @@ def backtest_strategy(
         price = df.iloc[i]["close"]
         pred = y_pred[i]
 
+        # Slippage : on achète plus cher, on vend moins cher
+        buy_price = price * (1 + slippage_pct)
+        sell_price = price * (1 - slippage_pct)
+
         if pred == 1 and capital > fee_per_order:  # BUY
             invest = capital - fee_per_order
-            shares = invest / price
+            shares = invest / buy_price
             position += shares
             capital = 0.0
             total_fees += fee_per_order
             trades += 1
         elif pred == 2 and position > 0:  # SELL
-            proceeds = position * price - fee_per_order
+            proceeds = position * sell_price - fee_per_order
             if proceeds > 0:
                 capital = proceeds
                 position = 0.0

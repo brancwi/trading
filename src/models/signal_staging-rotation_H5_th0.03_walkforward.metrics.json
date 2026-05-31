@@ -1,0 +1,24 @@
+{
+  "accuracy": 0.4822,
+  "precision_macro": 0.3732,
+  "recall_macro": 0.3746,
+  "f1_macro": 0.3648,
+  "f1_weighted": 0.4514,
+  "confusion_matrix": [
+    [
+      1329,
+      350,
+      159
+    ],
+    [
+      546,
+      282,
+      114
+    ],
+    [
+      420,
+      218,
+      72
+    ]
+  ]
+}

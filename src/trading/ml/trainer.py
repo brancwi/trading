@@ -40,34 +40,23 @@ def _prepare_xy(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, StandardScale
     return X_scaled, y, scaler
 
 
-def train_xgboost(
-    df: pd.DataFrame,
-    test_size: float = 0.2,
-    random_state: int = 42,
+def _train_xgboost_core(
+    X_train, y_train, X_test, y_test,
+    n_estimators=200, max_depth=5, learning_rate=0.1,
+    subsample=0.8, colsample_bytree=0.8,
+    random_state=42,
 ) -> dict[str, Any]:
-    """Entraîne un XGBClassifier multi-classe.
+    """Cœur d'entraînement XGBoost — réutilisable par walk-forward et random split."""
+    from xgboost import XGBClassifier
 
-    Returns:
-        Dict avec modèle, scaler, métriques, predictions
-    """
-    try:
-        from xgboost import XGBClassifier
-    except ImportError as e:
-        raise ImportError("xgboost is required. Install with: pip install xgboost") from e
-
-    X, y, scaler = _prepare_xy(df)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
-    )
-
-    logger.info("[Trainer] XGBoost train=%d test=%d features=%d", len(X_train), len(X_test), X.shape[1])
+    logger.info("[Trainer] XGBoost train=%d test=%d features=%d", len(X_train), len(X_test), X_train.shape[1])
 
     model = XGBClassifier(
-        n_estimators=200,
-        max_depth=5,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        learning_rate=learning_rate,
+        subsample=subsample,
+        colsample_bytree=colsample_bytree,
         objective="multi:softprob",
         num_class=3,
         eval_metric="mlogloss",
@@ -90,14 +79,76 @@ def train_xgboost(
 
     return {
         "model": model,
-        "scaler": scaler,
         "metrics": metrics,
-        "X_test": X_test,
         "y_test": y_test,
         "y_pred": y_pred,
         "y_proba": y_proba,
         "feature_names": FEATURE_COLS,
     }
+
+
+def train_xgboost(
+    df: pd.DataFrame,
+    test_size: float = 0.2,
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Entraîne un XGBClassifier multi-classe (split aléatoire)."""
+    X, y, scaler = _prepare_xy(df)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y
+    )
+    result = _train_xgboost_core(X_train, y_train, X_test, y_test, random_state=random_state)
+    result["scaler"] = scaler
+    return result
+
+
+def train_xgboost_walkforward(
+    df: pd.DataFrame,
+    split_date: str = "2025-01-01",
+    n_estimators=200, max_depth=5, learning_rate=0.1,
+    subsample=0.8, colsample_bytree=0.8,
+    random_state=42,
+) -> dict[str, Any]:
+    """Entraîne un XGBClassifier avec split temporel (walk-forward).
+
+    Train = données avant split_date
+    Test  = données à partir de split_date
+
+    Cela évite le look-ahead bias et simule une vraie stratégie
+    de trading en production.
+    """
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["timestamp"]).dt.date
+    df["date"] = pd.to_datetime(df["date"])
+
+    train_df = df[df["date"] < split_date]
+    test_df = df[df["date"] >= split_date]
+
+    if len(train_df) < 100 or len(test_df) < 50:
+        raise ValueError(f"Walk-forward split too small: train={len(train_df)} test={len(test_df)}")
+
+    X_train = train_df[FEATURE_COLS].values.astype(np.float32)
+    y_train = train_df["label"].map(LABEL_MAP).values
+    X_test = test_df[FEATURE_COLS].values.astype(np.float32)
+    y_test = test_df["label"].map(LABEL_MAP).values
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    logger.info("[Trainer] Walk-forward split: train=%d (before %s) test=%d (after)",
+                len(X_train), split_date, len(X_test))
+
+    result = _train_xgboost_core(
+        X_train, y_train, X_test, y_test,
+        n_estimators=n_estimators, max_depth=max_depth, learning_rate=learning_rate,
+        subsample=subsample, colsample_bytree=colsample_bytree,
+        random_state=random_state,
+    )
+    result["scaler"] = scaler
+    result["train_dates"] = (train_df["date"].min().isoformat(), train_df["date"].max().isoformat())
+    result["test_dates"] = (test_df["date"].min().isoformat(), test_df["date"].max().isoformat())
+    return result
 
 
 def save_model(result: dict[str, Any], path: str | Path) -> None:
