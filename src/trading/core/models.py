@@ -257,6 +257,23 @@ class TokenUsageLog(Base):
     triggered_by = Column(String, default="qwen_arbitration")  # qwen, cloud_fallback
 
 
+class TrainingLabel(Base):
+    """Labels d'entraînement générés par future-return sur l'historique de prix."""
+
+    __tablename__ = "training_labels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    horizon_days = Column(Integer, nullable=False, default=5)
+    close_at_signal = Column(Float, nullable=False)
+    future_close = Column(Float)
+    future_return = Column(Float)
+    label = Column(String, nullable=False, index=True)  # BUY | SELL | HOLD
+    threshold_used = Column(Float, nullable=False, default=0.03)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # =====================================================================
 # Pydantic Schemas (API)
 # =====================================================================
