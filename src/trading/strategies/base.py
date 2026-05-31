@@ -57,11 +57,14 @@ class StrategyBase(ABC):
         """Retourne le taux de conversion USD → devise du portfolio.
 
         Les prix de marché sont en USD.  Si le portfolio est en EUR,
-        on applique le taux fx_eur_usd (ex: 1.08 → 1 USD = 1/1.08 EUR).
+        on récupère le taux EUR/USD en temps réel via yfinance (cache 5min).
+        Le taux utilisé est logué dans la DB temporelle pour audit.
         """
         if port.base_currency == "EUR":
-            from trading.core.config import get_settings
-            return get_settings().fx_eur_usd
+            from trading.utils.fx import get_fx_eur_usd, log_fx_rate
+            rate = get_fx_eur_usd()
+            log_fx_rate(rate, portfolio_id=port.id)
+            return rate
         return 1.0
 
     def _to_portfolio_currency(self, amount_usd: float, port: Portfolio) -> float:
