@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, CheckConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, CheckConstraint, BigInteger, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from trading.core.database import Base
@@ -29,6 +29,9 @@ class News(Base):
 
 class MarketData(Base):
     __tablename__ = "market_data"
+    __table_args__ = (
+        UniqueConstraint("ticker", "timestamp", name="uq_market_data_ticker_timestamp"),
+    )
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     ticker = Column(String, nullable=False, index=True)
@@ -37,7 +40,7 @@ class MarketData(Base):
     high = Column(Float)
     low = Column(Float)
     change_pct = Column(Float)
-    volume = Column(Integer)
+    volume = Column(BigInteger)
     source = Column(String, default="finnhub")
 
 
@@ -272,6 +275,46 @@ class TrainingLabel(Base):
     label = Column(String, nullable=False, index=True)  # BUY | SELL | HOLD
     threshold_used = Column(Float, nullable=False, default=0.03)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FearGreed(Base):
+    """Crypto Fear & Greed Index (daily, from alternative.me)."""
+
+    __tablename__ = "fear_greed"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(DateTime, nullable=False, index=True)
+    value = Column(Integer, nullable=False)
+    classification = Column(String)
+    source = Column(String, default="alternative.me")
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MacroIndicator(Base):
+    """Indicateurs macroéconomiques (VIX, DXY, taux, etc.)."""
+
+    __tablename__ = "macro_indicators"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(DateTime, nullable=False, index=True)
+    indicator = Column(String, nullable=False, index=True)  # VIX, DXY, TNX
+    value = Column(Float, nullable=False)
+    source = Column(String, default="yfinance")
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FundingRate(Base):
+    """Binance funding rates (8h intervals)."""
+
+    __tablename__ = "funding_rates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, index=True)
+    symbol = Column(String, nullable=False, index=True)  # BTCUSDT, ETHUSDT
+    funding_rate = Column(Float, nullable=False)
+    mark_price = Column(Float)
+    source = Column(String, default="binance")
+    fetched_at = Column(DateTime, default=datetime.utcnow)
 
 
 # =====================================================================

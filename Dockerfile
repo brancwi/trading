@@ -26,7 +26,7 @@ RUN mkdir -p /app/data
 RUN pip install -e .
 
 # Runtime deps that may have been missed in requirements
-RUN pip install --no-cache-dir pandas xgboost
+RUN pip install --no-cache-dir pandas xgboost yfinance
 
 # Expose FastAPI port
 EXPOSE 8000
