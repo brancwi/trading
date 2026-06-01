@@ -1,0 +1,97 @@
+# ============================================================
+# Docker Compose — Base (services communs à tous les envs)
+# ============================================================
+# Usage:
+#   dev  : docker compose up
+#   staging: docker compose -f compose.yaml -f compose.staging.yaml up
+#   prod : docker compose -f compose.yaml -f compose.prod.yaml up
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trading-network
+
+  trading-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - sh
+      - -c
+      - "python scripts/init_docker.py && uvicorn trading.api.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - trading-network
+
+  trading-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python scripts/run_listener.py
+    depends_on:
+      trading-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python scripts/run_mcp_server.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/sse"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - trading-network
+
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    command: >
+      prefect server start
+      --host 0.0.0.0
+      --port 4200
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - trading-network
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  trading-network:
+    driver: bridge

@@ -25,7 +25,9 @@ from trading.ml.trainer import FEATURE_COLS
 
 logger = logging.getLogger(__name__)
 
-MODELS_DIR = Path(__file__).parent.parent.parent / "models"
+from trading.core.config import PROJECT_ROOT
+
+MODELS_DIR = PROJECT_ROOT / "models"
 
 # Mapping labels XGBoost → actions
 LABEL_TO_ACTION = {0: "HOLD", 1: "BUY", 2: "SELL"}

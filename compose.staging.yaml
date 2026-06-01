@@ -1,0 +1,68 @@
+# ============================================================
+# Docker Compose — Overrides Staging
+# Ports: 10xxx | DB: trading_staging | Env: staging
+# ============================================================
+# Usage:
+#   docker compose -f compose.yaml -f compose.staging.yaml up -d
+
+services:
+  postgres:
+    container_name: trading-postgres-staging
+    environment:
+      POSTGRES_DB: trading_staging
+    ports:
+      - "10005:5432"
+    volumes:
+      - postgres-data-staging:/var/lib/postgresql/data
+
+  trading-api:
+    container_name: trading-api-staging
+    ports:
+      - "10000:8000"
+    env_file:
+      - .env.staging
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - TRADING_ENVIRONMENT=staging
+
+  trading-listener:
+    container_name: trading-listener-staging
+    env_file:
+      - .env.staging
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - TRADING_ENVIRONMENT=staging
+
+  mcp-server:
+    container_name: trading-mcp-staging
+    ports:
+      - "10001:8001"
+    env_file:
+      - .env.staging
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8001
+      - TRADING_ENVIRONMENT=staging
+
+  prefect-server:
+    container_name: prefect-server-staging
+    ports:
+      - "10420:4200"
+    volumes:
+      - prefect-data-staging:/data
+    environment:
+      - PREFECT_HOME=/data
+      - PREFECT_API_DATABASE_CONNECTION_URL=sqlite+aiosqlite:////data/prefect.db
+      - PREFECT_SERVER_ALLOW_WILDCARD_CORS=true
+
+volumes:
+  postgres-data-staging:
+    driver: local
+  prefect-data-staging:
+    driver: local

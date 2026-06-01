@@ -25,6 +25,9 @@ RUN mkdir -p /app/data
 # Install the package in editable mode
 RUN pip install -e .
 
+# Runtime deps that may have been missed in requirements
+RUN pip install --no-cache-dir pandas xgboost
+
 # Expose FastAPI port
 EXPOSE 8000
 

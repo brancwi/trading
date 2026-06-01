@@ -1,0 +1,53 @@
+# ============================================================
+# Docker Compose — Monitoring (TimescaleDB + Grafana)
+# Optionnel — à charger en plus selon l'env
+# ============================================================
+# Usage:
+#   docker compose -f compose.yaml -f compose.staging.yaml -f compose.monitoring.yaml up -d
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: trading-timescaledb
+    environment:
+      POSTGRES_USER: monitoring
+      POSTGRES_PASSWORD: ${MONITORING_PASSWORD:-monitoring_pass}
+      POSTGRES_DB: trading_monitoring_staging
+    ports:
+      - "10003:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitoring"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: trading-grafana
+    ports:
+      - "10004:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel
+    networks:
+      - trading-network
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+volumes:
+  timescaledb-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  trading-network:
+    driver: bridge

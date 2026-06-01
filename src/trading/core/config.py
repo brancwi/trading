@@ -158,11 +158,20 @@ class Settings(BaseSettings):
 
     @property
     def resolved_database_url(self) -> str:
-        """DB URL selon l'environnement."""
+        """DB URL selon l'environnement.
+
+        Priorité:
+        1. DATABASE_URL explicite (non-défaut) pour staging/prod
+        2. URL spécifique à l'environnement
+        """
         if self.environment == "testing":
             return "sqlite:///:memory:"
         if self.is_dev:
             return self.dev_database_url
+        # Si DATABASE_URL a été surchargée par variable d'environnement, l'utiliser
+        _default_sqlite = f"sqlite:///{DATA_DIR}/trading.db"
+        if self.database_url and self.database_url != _default_sqlite:
+            return self.database_url
         if self.is_staging:
             return self.staging_database_url
         return self.production_database_url

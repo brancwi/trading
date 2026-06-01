@@ -1,0 +1,78 @@
+# ============================================================
+# Docker Compose — Overrides Production
+# Pas de reload, pas de dev tools, réplicas possibles
+# ============================================================
+# Usage:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+
+services:
+  postgres:
+    container_name: trading-postgres-prod
+    environment:
+      POSTGRES_DB: trading
+    ports: []  # Pas d'exposition externe en prod
+    volumes:
+      - postgres-data-prod:/var/lib/postgresql/data
+
+  trading-api:
+    command:
+      - sh
+      - -c
+      - "python scripts/init_docker.py && uvicorn trading.api.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "10010:8000"
+    env_file:
+      - .env.prod
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - TRADING_ENVIRONMENT=production
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  trading-listener:
+    container_name: trading-listener-prod
+    env_file:
+      - .env.prod
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - TRADING_ENVIRONMENT=production
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  mcp-server:
+    container_name: trading-mcp-prod
+    ports:
+      - "10011:8001"
+    env_file:
+      - .env.prod
+    environment:
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8001
+      - TRADING_ENVIRONMENT=production
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  prefect-server:
+    container_name: prefect-server-prod
+    ports:
+      - "10430:4200"
+    volumes:
+      - prefect-data-prod:/data
+    environment:
+      - PREFECT_HOME=/data
+      - PREFECT_API_DATABASE_CONNECTION_URL=sqlite+aiosqlite:////data/prefect.db
+
+volumes:
+  postgres-data-prod:
+    driver: local
+  prefect-data-prod:
+    driver: local
