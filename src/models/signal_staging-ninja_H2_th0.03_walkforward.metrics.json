@@ -1,0 +1,16 @@
+{
+  "accuracy": 0.5923650724001756,
+  "f1_macro": 0.320417475541349,
+  "backtest": {
+    "initial_capital": 500,
+    "base_currency": "USD",
+    "final_value": 680.5,
+    "total_return_pct": 36.1,
+    "sharpe_ratio": 0.3022,
+    "max_drawdown_pct": -10.86,
+    "trades_executed": 218,
+    "total_fees": 69.76,
+    "avg_trade_return_pct": 0.1656,
+    "fee_impact_pct": 13.95
+  }
+}

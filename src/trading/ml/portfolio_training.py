@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from trading.core.database import db_session
 from trading.core.models import Portfolio
@@ -27,21 +28,29 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 
 # Hyperparamètres spécifiques par type de portefeuille
-# Ninja (500€) : AGGRESSIF — cherche à multiplier le capital rapidement
+# Ninja (500€) : AGGRESSIF — swing trading sur signaux très forts (peu de trades, gros gains)
 # Rotation (3000€) : ÉQUILIBRÉ — rotation sectorielle classique
 # Simulation (3000€) : CONSERVATEUR — capital préservé, croissance lente
 PORTFOLIO_HYPERPARAMS = {
     "ninja": {
-        "n_estimators": 300,
-        "max_depth": 7,
-        "learning_rate": 0.15,
-        "subsample": 0.6,       # plus de bruit = moins d'overfitting sur données brutes
-        "colsample_bytree": 0.6,
-        "slippage_pct": 0.002,  # plus de slippage sur petits ordres
-        "confidence_threshold": 0.55,  # ne trade que sur signaux forts
-        "fee_per_order": 0.5,    # broker à bas coût pour petits comptes
+        "horizon": 2,                  # momentum court terme — court terme
+        "threshold": 0.03,             # 3% de mouvement attendu en 2 jours
+        "n_estimators": 150,
+        "max_depth": 4,
+        "learning_rate": 0.08,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "slippage_pct": 0.001,
+        "confidence_threshold": 0.0,   # pas de filtre confiance — SL/TP gèrent le risque
+        "fee_per_order": 0.32,         # IBKR Tiered: ~0.32€/order
+        "leverage": 1.0,
+        "take_profit_pct": 0.06,       # TP 6% — ratio 2:1 avec SL 3%
+        "stop_loss_pct": 0.03,         # SL 3% — protection disciplinée
+        "position_pct": 0.2,           # 20% sizing
     },
     "rotation": {
+        "horizon": 5,
+        "threshold": 0.03,
         "n_estimators": 200,
         "max_depth": 5,
         "learning_rate": 0.1,
@@ -52,6 +61,8 @@ PORTFOLIO_HYPERPARAMS = {
         "fee_per_order": 1.0,
     },
     "simulation": {
+        "horizon": 5,
+        "threshold": 0.03,
         "n_estimators": 150,
         "max_depth": 4,
         "learning_rate": 0.08,
@@ -75,35 +86,79 @@ def run_for_portfolio(
     strategy = portfolio.strategy_type
     hyper = PORTFOLIO_HYPERPARAMS.get(strategy, PORTFOLIO_HYPERPARAMS["simulation"])
 
+    # Utilise horizon/threshold spécifiques du portfolio
+    ph = hyper.get("horizon", horizon)
+    pt = hyper.get("threshold", threshold)
+
     logger.info(
-        "🚀 Portfolio '%s' — capital=%.0f %s | fee=%.2f | strategy=%s | hyper=%s",
+        "🚀 Portfolio '%s' — capital=%.0f %s | fee=%.2f | strategy=%s | H=%d th=%.2f",
         portfolio.id, portfolio.cash_initial, portfolio.base_currency,
-        portfolio.fee_per_order or 1.0, strategy, hyper,
+        portfolio.fee_per_order or 1.0, strategy, ph, pt,
     )
 
     # 1) Dataset
-    df = build_dataset(db, horizon=horizon, threshold=threshold)
+    df = build_dataset(db, horizon=ph, threshold=pt)
     if df.empty or len(df) < 100:
         raise ValueError(f"Dataset too small: {len(df)} rows")
 
-    # 2) Train walk-forward
-    result = train_xgboost_walkforward(
-        df,
-        split_date="2025-01-01",
+    # 2) Walk-forward : entraînement avant 2025-01-01, test après
+    split_date = "2025-01-01"
+    df["date"] = pd.to_datetime(df["timestamp"]).dt.date
+    df["date"] = pd.to_datetime(df["date"])
+    
+    df_train = df[df["date"] < split_date].copy()
+    df_test = df[df["date"] >= split_date].copy()
+    
+    # Sans features sentiment (pas d'historique, biaisent le modèle)
+    # Sans features crypto-spécifiques pour les portfolios stocks
+    # Sans macro features (VIX/DXY/TNX) — testé: elles dégradent les performances
+    excluded_features = ["fear_greed", "funding_rate_avg", "funding_rate_max_abs", "VIX", "DXY", "TNX"]
+    tech_cols = [c for c in FEATURE_COLS if not c.startswith("sentiment") and c not in excluded_features]
+    logger.info("  Features utilisées: %s", tech_cols)
+    
+    X_train = df_train[tech_cols].values.astype(np.float32)
+    y_train = df_train["label"].map({"HOLD": 0, "BUY": 1, "SELL": 2}).values
+    X_test = df_test[tech_cols].values.astype(np.float32)
+    y_test = df_test["label"].map({"HOLD": 0, "BUY": 1, "SELL": 2}).values
+    
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    from xgboost import XGBClassifier
+    model = XGBClassifier(
         n_estimators=hyper["n_estimators"],
         max_depth=hyper["max_depth"],
         learning_rate=hyper["learning_rate"],
         subsample=hyper["subsample"],
         colsample_bytree=hyper["colsample_bytree"],
+        objective="multi:softprob",
+        num_class=3,
+        eval_metric="mlogloss",
+        random_state=42,
+        n_jobs=4,
+        reg_alpha=0.1,      # L1 regularization
+        reg_lambda=1.0,     # L2 regularization
     )
+    model.fit(X_train, y_train)
+    
+    result = {
+        "model": model,
+        "scaler": scaler,
+        "y_pred": model.predict(X_test),
+        "y_proba": model.predict_proba(X_test),
+        "y_test": y_test,
+        "feature_names": tech_cols,
+    }
 
     # 3) Evaluate classification
     metrics = evaluate_classifier(result["y_test"], result["y_pred"])
     result["metrics"] = metrics
 
     # 4) Feature importance
+    feat_cols = result.get("feature_cols", FEATURE_COLS)
     if hasattr(result["model"], "feature_importances_"):
-        imp = list(zip(FEATURE_COLS, result["model"].feature_importances_))
+        imp = list(zip(feat_cols, result["model"].feature_importances_))
         imp.sort(key=lambda x: x[1], reverse=True)
         result["feature_importance"] = imp
 
@@ -121,6 +176,10 @@ def run_for_portfolio(
         base_currency=portfolio.base_currency,
         slippage_pct=hyper["slippage_pct"],
         confidence_threshold=hyper.get("confidence_threshold", 0.0),
+        leverage=hyper.get("leverage", 1.0),
+        take_profit_pct=hyper.get("take_profit_pct"),
+        stop_loss_pct=hyper.get("stop_loss_pct"),
+        position_pct=hyper.get("position_pct", 1.0),
     )
     result["backtest"] = backtest
     result["portfolio_id"] = portfolio.id

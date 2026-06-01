@@ -29,6 +29,7 @@ from trading.core.config import get_settings
 from trading.core.models import Portfolio, Signal
 from trading.ml.features import FeatureEngine
 from trading.monitoring.decorator import trace_llm_call
+from trading.monitoring.service import MonitorService
 
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 
@@ -308,9 +309,9 @@ class DecisionLLM:
         )
 
         user = f"""### CONTEXTE PORTFOLIO
-- Cash disponible: ${portfolio.cash_available:.2f}
-- Cash minimum à conserver: $100
-- Montant max par trade: ${portfolio.max_trade_amount or 500:.2f}
+- Cash disponible: €{portfolio.cash_available:.2f} (~${portfolio.cash_available * 1.08:.2f})
+- Cash minimum à conserver: €50
+- Montant max par trade: €{portfolio.max_trade_amount or 150:.2f}
 - Positions actuelles: {json.dumps(positions_json, ensure_ascii=False)}
 
 ### SIGNAUX AGRÉGÉS
@@ -366,7 +367,7 @@ class DecisionLLM:
             return []
 
         # Log incoming signals
-        MonitorService.log_event(
+        MonitorService.log_message(
             channel="decision_llm_input",
             source="decision_llm.decide",
             payload=[{"ticker": s.ticker, "action": s.action, "sentiment": s.sentiment} for s in signals],
@@ -428,7 +429,7 @@ class DecisionLLM:
             valid.append(d)
 
         # Log outgoing decisions
-        MonitorService.log_event(
+        MonitorService.log_message(
             channel="decision_llm_output",
             source=f"decision_llm.decide.{backend}",
             payload=valid,

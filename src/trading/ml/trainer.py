@@ -19,12 +19,23 @@ from sklearn.preprocessing import StandardScaler
 logger = logging.getLogger(__name__)
 
 FEATURE_COLS = [
+    # Classic technical
     "sma_10", "sma_20", "sma_50", "ema_10", "ema_20",
     "rsi_14", "macd", "macd_signal", "macd_hist",
     "bb_width", "bb_pct", "atr_14",
     "momentum_10", "roc_10", "volatility_20",
     "price_sma20_ratio", "price_sma50_ratio",
     "sentiment_mean", "sentiment_confidence",
+    # Crypto-native
+    "price_change_1d", "price_change_3d", "price_change_7d",
+    "volume_ratio", "volume_change_1d",
+    "adx_14", "stoch_k", "stoch_d",
+    "obv_ratio", "williams_r", "tr_normalized",
+    "volatility_ratio",
+    # External macro
+    "fear_greed", "funding_rate_avg", "funding_rate_max_abs",
+    # Macro indicators (stocks)
+    "VIX", "DXY", "TNX",
 ]
 
 LABEL_MAP = {"HOLD": 0, "BUY": 1, "SELL": 2}
@@ -84,6 +95,7 @@ def _train_xgboost_core(
         "y_pred": y_pred,
         "y_proba": y_proba,
         "feature_names": FEATURE_COLS,
+        "test_indices": None,
     }
 
 
@@ -94,11 +106,12 @@ def train_xgboost(
 ) -> dict[str, Any]:
     """Entraîne un XGBClassifier multi-classe (split aléatoire)."""
     X, y, scaler = _prepare_xy(df)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
+    X_train, X_test, y_train, y_test, train_idx, test_idx = train_test_split(
+        X, y, df.index, test_size=test_size, random_state=random_state, stratify=y
     )
     result = _train_xgboost_core(X_train, y_train, X_test, y_test, random_state=random_state)
     result["scaler"] = scaler
+    result["test_indices"] = test_idx
     return result
 
 
@@ -152,21 +165,23 @@ def train_xgboost_walkforward(
 
 
 def save_model(result: dict[str, Any], path: str | Path) -> None:
-    """Sauvegarde le modèle + scaler + métriques."""
+    """Sauvegarde le modèle + scaler + métriques + hyperparams."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
         pickle.dump({
             "model": result["model"],
             "scaler": result["scaler"],
-            "metrics": result["metrics"],
-            "feature_names": result["feature_names"],
+            "metrics": result.get("metrics", {}),
+            "feature_names": result.get("feature_names", FEATURE_COLS),
+            "hyperparams": result.get("hyperparams", {}),
             "label_map": LABEL_MAP,
         }, f)
     # Métriques JSON lisibles
-    json_path = path.with_suffix(".metrics.json")
-    with open(json_path, "w") as f:
-        json.dump(result["metrics"], f, indent=2)
+    if "metrics" in result:
+        json_path = path.with_suffix(".metrics.json")
+        with open(json_path, "w") as f:
+            json.dump(result["metrics"], f, indent=2, default=str)
     logger.info("[Trainer] Model saved to %s", path)
 
 
