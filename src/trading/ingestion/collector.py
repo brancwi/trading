@@ -93,7 +93,7 @@ class MarketDataCollector:
         except Exception as e:
             logger.error(f"Erreur Finnhub general news: {e}")
 
-        MonitorService.log_event(
+        MonitorService.log_message(
             channel="news_finnhub",
             source="finnhub",
             payload=all_articles,
@@ -120,7 +120,7 @@ class MarketDataCollector:
                 prices[ticker] = data.get("c", 0.0)
             except Exception as e:
                 logger.error(f"Erreur prix {ticker}: {e}")
-        MonitorService.log_event(
+        MonitorService.log_message(
             channel="prices_finnhub",
             source="finnhub.quote",
             payload=prices,

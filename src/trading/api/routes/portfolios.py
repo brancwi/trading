@@ -6,9 +6,15 @@ from sqlalchemy import func
 
 from sqlalchemy import text
 from trading.api.dependencies import DbDep, AuthDep
-from trading.core.models import Portfolio, PortfolioHistory, Position, Trade, PortfolioRead, PortfolioSummary, Command, CommandCreate
+from trading.core.models import (
+    Portfolio, PortfolioHistory, Position, Trade,
+    PortfolioRead, PortfolioSummary,
+    Command, CommandCreate,
+    PnLReconciliation, PnLReconciliationRead, TrackingErrorSummary,
+)
 from trading.execution.commands import CommandProcessor
 from trading.events.emitters import emit_hermes_command_received
+from trading.monitoring.reconciliation import PnLReconciliationService
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
@@ -114,3 +120,37 @@ def resume_portfolio(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
     processor = CommandProcessor(db)
     processor.process_pending()
     return {"status": "active", "command_id": cmd.id}
+
+
+# ------------------------------------------------------------------
+# P&L Reconciliation
+# ------------------------------------------------------------------
+
+@router.get("/{portfolio_id}/reconciliation", response_model=list[PnLReconciliationRead])
+def get_reconciliations(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
+    return (
+        db.query(PnLReconciliation)
+        .filter(PnLReconciliation.portfolio_id == portfolio_id)
+        .order_by(PnLReconciliation.computed_at.desc())
+        .limit(200)
+        .all()
+    )
+
+
+@router.get("/{portfolio_id}/tracking-error", response_model=list[TrackingErrorSummary])
+def get_tracking_error(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
+    svc = PnLReconciliationService(db)
+    return svc.tracking_error_summary(portfolio_id=portfolio_id)
+
+
+@router.get("/{portfolio_id}/reconciliation/by-ticker")
+def get_reconciliation_by_ticker(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
+    svc = PnLReconciliationService(db)
+    return svc.ticker_breakdown(portfolio_id)
+
+
+@router.post("/{portfolio_id}/reconciliation/recalculate")
+def recalculate_reconciliation(portfolio_id: str, db: Session = DbDep, _: str = AuthDep):
+    svc = PnLReconciliationService(db)
+    count = svc.reconcile_portfolio(portfolio_id)
+    return {"status": "ok", "portfolio_id": portfolio_id, "trades_reconciled": count}

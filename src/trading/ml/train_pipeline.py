@@ -46,9 +46,12 @@ def run_pipeline(horizon: int = 5, threshold: float = 0.03, save: bool = True) -
             result["feature_importance"] = imp
 
         # 4) Backtest
-        # Récupère le sous-ensemble test avec prix pour le backtest
-        test_indices = df.index[-len(result["y_test"]):]
-        df_test = df.iloc[-len(result["y_test"]):].copy()
+        # Récupère le vrai sous-ensemble test avec les indices du split
+        if result.get("test_indices") is not None:
+            df_test = df.loc[result["test_indices"]].copy()
+        else:
+            # Fallback pour compatibilité (ne devrait pas arriver)
+            df_test = df.iloc[-len(result["y_test"]):].copy()
         backtest = backtest_strategy(df_test, result["y_pred"])
         result["backtest"] = backtest
 

@@ -46,7 +46,7 @@ class RotationStrategy(StrategyBase):
 
         # 2. Achat sur signaux (si secteur faible / non couvert)
         # Simplifié : achat si sentiment fort et pas de position
-        for sig in self.get_signals(db):
+        for sig in self.get_signals(db, source_prefix=f"ml_xgboost_{self.portfolio_id}"):
             if sig.action not in ("BUY", "STRONG_BUY"):
                 continue
             if sig.ticker not in prices:

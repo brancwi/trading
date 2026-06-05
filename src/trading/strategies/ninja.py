@@ -112,10 +112,14 @@ class NinjaStrategy(StrategyBase):
                 logger.info("[Ninja] DecisionLLM: %d décisions", len(decisions))
 
                 # ── 5. Exécution des décisions LLM ─────────────────────
+                # Map ticker -> signal_id pour lier chaque trade à son signal d'origine
+                signal_map = {s.ticker: s.id for s in unique_signals if s.id}
+
                 for dec in decisions:
                     ticker = dec.get("ticker", "")
                     action = dec.get("action", "")
                     amount = dec.get("amount", 0.0)
+                    sig_id = signal_map.get(ticker)
 
                     if ticker not in prices:
                         continue
@@ -130,9 +134,9 @@ class NinjaStrategy(StrategyBase):
 
                         qty = trade_amount / price
                         try:
-                            trade = self.buy(db, ticker, qty, price)
+                            trade = self.buy(db, ticker, qty, price, signal_id=sig_id)
                             trades.append(trade)
-                            logger.info("[Ninja] ACHAT %s: %.2f parts @ %.2f", ticker, qty, price)
+                            logger.info("[Ninja] ACHAT %s: %.2f parts @ %.2f (sig=%s)", ticker, qty, price, sig_id)
                         except ValueError as e:
                             logger.warning("[Ninja] Échec achat %s: %s", ticker, e)
 
@@ -140,9 +144,9 @@ class NinjaStrategy(StrategyBase):
                         pos = self.get_position(db, ticker)
                         if pos:
                             try:
-                                trade = self.sell(db, ticker, pos.quantity, price)
+                                trade = self.sell(db, ticker, pos.quantity, price, signal_id=sig_id)
                                 trades.append(trade)
-                                logger.info("[Ninja] VENTE %s: %.2f parts @ %.2f", ticker, pos.quantity, price)
+                                logger.info("[Ninja] VENTE %s: %.2f parts @ %.2f (sig=%s)", ticker, pos.quantity, price, sig_id)
                             except ValueError as e:
                                 logger.warning("[Ninja] Échec vente %s: %s", ticker, e)
 

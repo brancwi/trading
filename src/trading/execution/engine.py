@@ -10,6 +10,7 @@ from trading.strategies.base import StrategyBase
 from trading.strategies.simulation import SimulationStrategy
 from trading.strategies.rotation import RotationStrategy
 from trading.strategies.ninja import NinjaStrategy
+from trading.monitoring.reconciliation import PnLReconciliationService
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ class ExecutionEngine:
                 trades = strategy.run(self.db, prices)
                 results[port.id] = trades
                 logger.info(f"{port.id}: {len(trades)} trades")
+                # Réconciliation automatique P&L pour chaque trade
+                self._reconcile_trades(trades)
             except Exception as e:
                 logger.exception(f"Erreur stratégie {port.id}: {e}")
                 results[port.id] = []
@@ -54,4 +57,17 @@ class ExecutionEngine:
         if not strategy_cls:
             raise ValueError(f"Stratégie {port.strategy_type} inconnue")
         strategy = strategy_cls(port.id)
-        return strategy.run(self.db, prices)
+        trades = strategy.run(self.db, prices)
+        self._reconcile_trades(trades)
+        return trades
+
+    def _reconcile_trades(self, trades: list[Trade]) -> None:
+        """Calcule l'implementation shortfall pour chaque trade exécuté."""
+        if not trades:
+            return
+        svc = PnLReconciliationService(self.db)
+        for trade in trades:
+            try:
+                svc.reconcile_trade(trade)
+            except Exception:
+                logger.exception(f"Erreur réconciliation trade {trade.id}")

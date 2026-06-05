@@ -479,7 +479,7 @@ def get_system_status() -> dict:
         recent_errors = 0
 
     # Log MCP tool invocation
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_system_status",
         metadata={"db_type": db_type, "services": services},
@@ -521,7 +521,7 @@ def get_llm_calls(
     limit: int = 100,
 ) -> list[dict]:
     """Liste détaillée des appels LLM récents depuis la DB monitoring."""
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_llm_calls",
         metadata={"hours": hours, "provider": provider, "model": model},
@@ -538,7 +538,7 @@ def get_llm_calls(
 @mcp.tool()
 def get_llm_summary(hours: int = 24) -> dict:
     """Agrégations des appels LLM (coût, tokens, durée moyenne)."""
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_llm_summary",
         metadata={"hours": hours},
@@ -553,7 +553,7 @@ def get_messages(
     limit: int = 100,
 ) -> list[dict]:
     """Messages entrants par canal depuis la DB monitoring."""
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_messages",
         metadata={"channel": channel, "hours": hours},
@@ -568,7 +568,7 @@ def get_messages(
 @mcp.tool()
 def get_message_channels() -> list[dict]:
     """Canaux actifs avec statistiques (24h)."""
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_message_channels",
     )
@@ -581,7 +581,7 @@ def get_performance_metrics(
     hours: int = 24,
 ) -> dict:
     """Métriques de performance (latence, throughput) depuis la DB monitoring."""
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="mcp_tool",
         source="mcp.get_performance_metrics",
         metadata={"metric_name": metric_name, "hours": hours},

@@ -45,7 +45,7 @@ async def log_requests(request, call_next):
     start = perf_counter()
     response = await call_next(request)
     duration_ms = round((perf_counter() - start) * 1000, 2)
-    MonitorService.log_event(
+    MonitorService.log_message(
         channel="api_rest",
         source=f"{request.method} {request.url.path}",
         metadata={

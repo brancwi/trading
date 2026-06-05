@@ -13,6 +13,7 @@ from trading.flows.notifications_flow import notifications_flow
 from trading.flows.validation_flow import validation_flow
 from trading.flows.fusion_training_flow import fusion_training_flow
 from trading.flows.signal_training_flow import signal_training_flow
+from trading.flows.ml_signal_flow import ml_signal_generation_flow
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ if __name__ == "__main__":
         signal_training_flow.to_deployment(name="signal-training-daily", cron="0 3 * * *"),
         # Deployments avec schedule court (boucle de trading)
         sentiment_analysis_flow.to_deployment(name="sentiment-every-5min", interval=300),
+        ml_signal_generation_flow.to_deployment(name="ml-signals-every-15min", interval=900),
         strategy_execution_flow.to_deployment(name="strategy-every-5min", interval=300),
         # Deployments sans schedule (event-driven / on-demand)
         command_processing_flow.to_deployment(name="command-on-demand"),

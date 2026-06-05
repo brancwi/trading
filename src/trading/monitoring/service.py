@@ -347,7 +347,7 @@ class MonitorService:
             logger.warning("[MonitorService] Failed to log message: %s", e)
 
     @staticmethod
-    def log_event(
+    def log_message(
         channel: str,
         source: str,
         payload: dict | list | str | None = None,

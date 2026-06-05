@@ -317,6 +317,44 @@ class FundingRate(Base):
     fetched_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PnLReconciliation(Base):
+    """Réconciliation P&L simulé (théorique) vs réel pour chaque trade.
+
+    Permet de quantifier le slippage, l'implementation shortfall
+    et les coûts cachés par stratégie / ticker.
+    """
+
+    __tablename__ = "pnl_reconciliation"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    computed_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Liens
+    trade_id = Column(Integer, ForeignKey("trades.id"), nullable=False, index=True)
+    signal_id = Column(Integer, ForeignKey("signals.id"), nullable=True, index=True)
+    portfolio_id = Column(String, ForeignKey("portfolios.id"), nullable=False, index=True)
+    ticker = Column(String, nullable=False, index=True)
+    strategy_type = Column(String, nullable=False)
+
+    # Prix
+    expected_price = Column(Float, nullable=False)      # prix au signal
+    executed_price = Column(Float, nullable=False)      # prix d'exécution réel
+    slippage = Column(Float, nullable=False)            # écart prix (€/USD signé)
+    slippage_pct = Column(Float, nullable=False)        # écart en %
+
+    # Quantités / Frais
+    expected_quantity = Column(Float, nullable=False)
+    executed_quantity = Column(Float, nullable=False)
+    expected_fees = Column(Float, nullable=False)
+    executed_fees = Column(Float, nullable=False)
+
+    # P&L
+    expected_pnl = Column(Float, nullable=False)        # P&L théorique
+    realized_pnl = Column(Float, nullable=False)        # P&L réel (depuis Trade)
+    implementation_shortfall = Column(Float, nullable=False)  # expected - realized
+    implementation_shortfall_pct = Column(Float, nullable=False)  # en % du trade
+
+
 # =====================================================================
 # Pydantic Schemas (API)
 # =====================================================================
@@ -447,3 +485,41 @@ class StatusRead(BaseModel):
     portfolios: dict[str, float]
     pending_commands: int
     unread_signals: int
+
+
+class PnLReconciliationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    computed_at: datetime
+    trade_id: int
+    signal_id: int | None
+    portfolio_id: str
+    ticker: str
+    strategy_type: str
+    expected_price: float
+    executed_price: float
+    slippage: float
+    slippage_pct: float
+    expected_quantity: float
+    executed_quantity: float
+    expected_fees: float
+    executed_fees: float
+    expected_pnl: float
+    realized_pnl: float
+    implementation_shortfall: float
+    implementation_shortfall_pct: float
+
+
+class TrackingErrorSummary(BaseModel):
+    portfolio_id: str
+    strategy_type: str
+    total_trades: int
+    avg_slippage: float
+    avg_slippage_pct: float
+    avg_implementation_shortfall: float
+    avg_implementation_shortfall_pct: float
+    total_expected_pnl: float
+    total_realized_pnl: float
+    total_tracking_error: float
+    worst_trade_slippage_pct: float
+    best_trade_slippage_pct: float

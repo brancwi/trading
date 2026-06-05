@@ -40,14 +40,11 @@ class StrategyBase(ABC):
     def get_positions(self, db: Session) -> list[Position]:
         return db.query(Position).filter(Position.portfolio_id == self.portfolio_id).all()
 
-    def get_signals(self, db: Session, limit: int = 50) -> list[Signal]:
-        return (
-            db.query(Signal)
-            .filter(Signal.consumed == 0)
-            .order_by(Signal.timestamp.desc())
-            .limit(limit)
-            .all()
-        )
+    def get_signals(self, db: Session, limit: int = 50, source_prefix: str | None = None) -> list[Signal]:
+        q = db.query(Signal).filter(Signal.consumed == 0)
+        if source_prefix:
+            q = q.filter(Signal.source.like(f"{source_prefix}%"))
+        return q.order_by(Signal.timestamp.desc()).limit(limit).all()
 
     # ------------------------------------------------------------------
     # FX helper — conversion automatique USD → devise du portfolio

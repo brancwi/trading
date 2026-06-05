@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 
 from trading.strategies.base import StrategyBase
 from trading.core.models import Trade, Signal
-from trading.ml.signal_model import SignalModel
+from trading.ml.signal_generator import MLSignalGenerator
 
 logger = logging.getLogger(__name__)
 
 
 class SimulationStrategy(StrategyBase):
-    """Achat sur sentiment fort, filtré par DecisionLLM ou SignalModel ML."""
+    """Achat sur signaux ML XGBoost, filtré optionnellement par DecisionLLM."""
 
     def run(self, db: Session, prices: dict[str, float]) -> list[Trade]:
         port = self.get_portfolio(db)
@@ -26,14 +26,13 @@ class SimulationStrategy(StrategyBase):
         max_trade = port.max_trade_amount or 500
         use_decision_llm = config.get("enable_decision_llm", False)
 
-        # Chargement lazy du SignalModel
-        signal_model = SignalModel()
-        use_ml = signal_model.trained
-        if use_ml:
-            logger.info("[Simulation] SignalModel entraîné — filtrage ML actif")
+        # Le filtrage ML est déjà fait par MLSignalGenerator — les signaux entrants
+        # sont déjà des prédictions XGBoost de haute qualité.
+        use_ml = False
+        logger.info("[Simulation] Signaux XGBoost — filtrage legacy désactivé")
 
         trades: list[Trade] = []
-        signals = self.get_signals(db)
+        signals = self.get_signals(db, source_prefix=f"ml_xgboost_{self.portfolio_id}")
 
         # ── Agrégation par ticker : 1 seul trade par ticker ──
         from collections import defaultdict
@@ -82,21 +81,6 @@ class SimulationStrategy(StrategyBase):
             for ticker, sigs in ticker_signals.items():
                 # Sélection du meilleur signal (plus haut sentiment * confidence)
                 best_sig = max(sigs, key=lambda s: abs(s.sentiment) * s.confidence)
-
-                # Filtrage ML : si le modèle prédit HOLD/SELL, on ignore tout le ticker
-                if use_ml:
-                    ml_pred = signal_model.predict(
-                        ticker=ticker,
-                        sentiment_combined=best_sig.sentiment,
-                        sentiment_confidence=best_sig.confidence,
-                    )
-                    if ml_pred["action"] in ("HOLD", "SELL"):
-                        logger.info(
-                            f"[Simulation] ML filtre {ticker}: "
-                            f"sentiment={best_sig.sentiment:.2f} mais ML={ml_pred['action']} "
-                            f"(conf={ml_pred['confidence']:.2f})"
-                        )
-                        continue
 
                 # Montant du trade (une seule fois par ticker)
                 trade_amount = min(max_trade, port.cash_available - cash_min)

@@ -79,6 +79,7 @@ cmd_start() {
     else
         echo -e "  ${YEL}→${NC} Démarrage MCP Server..."
         cd "$PROJECT_DIR"
+        export TRADING_ENVIRONMENT=staging
         nohup uv run python scripts/run_mcp_server.py > "$(log_file mcp-server)" 2>&1 &
         echo $! > "$(pid_file mcp-server)"
         sleep 2
@@ -91,6 +92,7 @@ cmd_start() {
     else
         echo -e "  ${YEL}→${NC} Démarrage API Server..."
         cd "$PROJECT_DIR"
+        export TRADING_ENVIRONMENT=staging
         nohup uv run python scripts/run_api.py > "$(log_file api-server)" 2>&1 &
         echo $! > "$(pid_file api-server)"
         sleep 2
@@ -103,6 +105,7 @@ cmd_start() {
     else
         echo -e "  ${YEL}→${NC} Démarrage Listener..."
         cd "$PROJECT_DIR"
+        export TRADING_ENVIRONMENT=staging
         nohup uv run python scripts/run_listener.py > "$(log_file listener)" 2>&1 &
         echo $! > "$(pid_file listener)"
         sleep 2
@@ -115,6 +118,7 @@ cmd_start() {
     else
         echo -e "  ${YEL}→${NC} Démarrage Prefect Server..."
         cd "$PROJECT_DIR"
+        export TRADING_ENVIRONMENT=staging
         nohup uv run prefect server start > "$(log_file prefect-server)" 2>&1 &
         echo $! > "$(pid_file prefect-server)"
         sleep 5
@@ -127,6 +131,7 @@ cmd_start() {
     else
         echo -e "  ${YEL}→${NC} Déploiement des flows Prefect..."
         cd "$PROJECT_DIR"
+        export TRADING_ENVIRONMENT=staging
         export PREFECT_API_URL=http://localhost:4200/api
         nohup uv run python -m trading.flows.deploy > "$(log_file prefect-deploy)" 2>&1 &
         echo $! > "$(pid_file prefect-deploy)"
@@ -209,22 +214,27 @@ cmd_restart() {
     case "$svc" in
         mcp-server)
             cd "$PROJECT_DIR"
+            export TRADING_ENVIRONMENT=staging
             nohup uv run python scripts/run_mcp_server.py > "$(log_file mcp-server)" 2>&1 &
             ;;
         api-server)
             cd "$PROJECT_DIR"
+            export TRADING_ENVIRONMENT=staging
             nohup uv run python scripts/run_api.py > "$(log_file api-server)" 2>&1 &
             ;;
         listener)
             cd "$PROJECT_DIR"
+            export TRADING_ENVIRONMENT=staging
             nohup uv run python scripts/run_listener.py > "$(log_file listener)" 2>&1 &
             ;;
         prefect-server)
             cd "$PROJECT_DIR"
+            export TRADING_ENVIRONMENT=staging
             nohup uv run prefect server start > "$(log_file prefect-server)" 2>&1 &
             ;;
         prefect-deploy)
             cd "$PROJECT_DIR"
+            export TRADING_ENVIRONMENT=staging
             export PREFECT_API_URL=http://localhost:4200/api
             nohup uv run python -m trading.flows.deploy > "$(log_file prefect-deploy)" 2>&1 &
             ;;
@@ -260,6 +270,31 @@ case "${1:-}" in
     logs|log)
         cmd_logs "${2:-}"
         ;;
+    docker-staging)
+        echo -e "${GRN}▶ Démarrage Docker Compose Staging...${NC}"
+        cd "$PROJECT_DIR"
+        docker compose -f compose.yaml -f compose.staging.yaml up -d
+        echo -e "${GRN}✓${NC} Staging démarré"
+        echo "  API       → http://localhost:10000"
+        echo "  MCP       → http://localhost:10001"
+        echo "  Prefect   → http://localhost:10420"
+        ;;
+    docker-prod)
+        echo -e "${GRN}▶ Démarrage Docker Compose Production...${NC}"
+        cd "$PROJECT_DIR"
+        docker compose -f compose.yaml -f compose.prod.yaml up -d
+        echo -e "${GRN}✓${NC} Production démarrée"
+        echo "  API       → http://localhost:10010"
+        echo "  MCP       → http://localhost:10011"
+        echo "  Prefect   → http://localhost:10430"
+        ;;
+    docker-down)
+        echo -e "${YEL}▶ Arrêt des conteneurs Docker...${NC}"
+        cd "$PROJECT_DIR"
+        docker compose -f compose.yaml -f compose.staging.yaml down 2>/dev/null || true
+        docker compose -f compose.yaml -f compose.prod.yaml down 2>/dev/null || true
+        echo -e "${GRN}✓${NC} Conteneurs arrêtés"
+        ;;
     test)
         echo -e "${GRN}▶ Exécution de la suite de tests...${NC}"
         cd "$PROJECT_DIR"
@@ -269,12 +304,15 @@ case "${1:-}" in
         echo "Dev Manager — Trading Engine V4.2"
         echo ""
         echo "Usage:"
-        echo "  $0 start              Démarre tous les services"
-        echo "  $0 stop               Arrête tous les services"
-        echo "  $0 restart <service>  Redémarre un service (mcp-server|api-server|listener|prefect-server|prefect-deploy)"
-        echo "  $0 status             État des services"
+        echo "  $0 start              Démarre tous les services (local)"
+        echo "  $0 stop               Arrête tous les services (local)"
+        echo "  $0 restart <service>  Redémarre un service local"
+        echo "  $0 status             État des services locaux"
         echo "  $0 logs [service]     Logs temps réel (service optionnel)"
         echo "  $0 test               Exécute la suite de tests (pytest)"
+        echo "  $0 docker-staging     Démarre l'infra en conteneurs (staging)"
+        echo "  $0 docker-prod        Démarre l'infra en conteneurs (production)"
+        echo "  $0 docker-down        Arrête tous les conteneurs Docker"
         echo ""
         ;;
 esac
