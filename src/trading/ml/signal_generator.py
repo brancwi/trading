@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 
 from trading.core.config import PROJECT_ROOT
 
-MODELS_DIR = PROJECT_ROOT / "models"
+# Cherche les modèles dans plusieurs dossiers (compatibilité staging/dev/prod)
+MODELS_DIRS = [
+    PROJECT_ROOT / "models",
+    PROJECT_ROOT / "src" / "models",
+]
 
 # Mapping labels XGBoost → actions
 LABEL_TO_ACTION = {0: "HOLD", 1: "BUY", 2: "SELL"}
@@ -47,11 +51,43 @@ class MLSignalGenerator:
         self._load_model()
 
     def _load_model(self) -> None:
-        """Charge le modèle XGBoost le plus récent pour ce portfolio."""
-        pattern = f"signal_{self.portfolio_id}_H*_th*_walkforward.pkl"
-        files = list(MODELS_DIR.glob(pattern))
+        """Charge le modèle XGBoost le plus récent pour ce portfolio.
+        
+        Supporte plusieurs conventions de nommage:
+          - signal_{portfolio_id}_H*_th*_walkforward.pkl
+          - signal_staging-{portfolio_id}_H*_th*_walkforward.pkl
+          - signal_{portfolio_id}_H*_th*.pkl (sans walkforward)
+          - signal_*{portfolio_id}*_H*_th*.pkl (fallback générique)
+        """
+        portfolio_id = self.portfolio_id
+        search_patterns = [
+            f"signal_{portfolio_id}_H*_th*_walkforward.pkl",
+            f"signal_staging-{portfolio_id}_H*_th*_walkforward.pkl",
+            f"signal_{portfolio_id}_H*_th*.pkl",
+            f"signal_*{portfolio_id}*_H*_th*.pkl",
+        ]
+        
+        files: list[Path] = []
+        for models_dir in MODELS_DIRS:
+            if not models_dir.exists():
+                continue
+            for pattern in search_patterns:
+                matched = list(models_dir.glob(pattern))
+                if matched:
+                    files.extend(matched)
+                    logger.debug("[MLSignal] Pattern %s dans %s: %d fichiers", pattern, models_dir, len(matched))
+        
+        # Dédoublonner
+        seen = set()
+        unique_files = []
+        for f in files:
+            if f not in seen:
+                seen.add(f)
+                unique_files.append(f)
+        files = unique_files
+        
         if not files:
-            logger.warning("[MLSignal] Aucun modèle trouvé pour %s", self.portfolio_id)
+            logger.warning("[MLSignal] Aucun modèle trouvé pour %s", portfolio_id)
             return
         
         model_path = max(files, key=lambda p: p.stat().st_mtime)
