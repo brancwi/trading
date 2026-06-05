@@ -30,6 +30,7 @@ from trading.core.models import Portfolio, Signal
 from trading.ml.features import FeatureEngine
 from trading.monitoring.decorator import trace_llm_call
 from trading.monitoring.service import MonitorService
+from trading.monitoring.token_budget import get_token_budget
 
 from trading.sentiment.token_tracker import TokenTracker, TokenUsage
 
@@ -62,6 +63,7 @@ class DecisionLLM:
         self.device = settings.ml_device if settings.ml_device != "cpu" else "cpu"
         self.feature_engine = FeatureEngine()
         self.token_tracker = TokenTracker()
+        self.budget = get_token_budget()
         self._http = httpx.Client(timeout=60.0)
         logger.info(
             "[DecisionLLM] env=%s | use_cloud=%s | model=%s",
@@ -152,6 +154,15 @@ class DecisionLLM:
             output_tokens=output_tokens,
             estimated_cost_usd=cost_usd,
         ))
+
+        # Enregistrer dans le budget token
+        self.budget.record_spend(
+            cost_usd=cost_usd,
+            model=_DEEPSEEK_MODEL,
+            provider="deepseek",
+            triggered_by="decision_llm._call_deepseek",
+            metadata={"input_tokens": input_tokens, "output_tokens": output_tokens},
+        )
 
         logger.info(
             "[DecisionLLM] DeepSeek call — input=%d, output=%d, cost=$%.6f",
@@ -366,6 +377,14 @@ class DecisionLLM:
             logger.info("[DecisionLLM] Aucun signal — pas de décision")
             return []
 
+        # ── Vérification budget token ──
+        estimated_cost = 0.0005 if self.use_cloud else 0.0  # DeepSeek ~$0.0005/call
+        can_spend, reason = self.budget.can_spend(estimated_cost)
+        if not can_spend:
+            logger.warning("[DecisionLLM] Budget bloqué: %s — fallback vers règles simples", reason)
+            # Fallback: décision basée sur les signaux sans LLM
+            return self._fallback_decision(signals, prices, portfolio)
+
         # Log incoming signals
         MonitorService.log_message(
             channel="decision_llm_input",
@@ -444,3 +463,45 @@ class DecisionLLM:
         )
 
         return valid
+
+    def _fallback_decision(
+        self,
+        signals: list[Signal],
+        prices: dict[str, float],
+        portfolio: Portfolio,
+    ) -> list[dict[str, Any]]:
+        """Décision de fallback quand le budget est épuisé ou le LLM indisponible.
+        
+        Règles simples:
+          - SELL/STRONG_SELL: ne pas acheter
+          - BUY/STRONG_BUY avec confidence > 0.7: acheter montant max/2
+          - HOLD: ignorer
+          - Ne jamais dépasser le cash disponible
+          - Ne pas racheter un ticker déjà en position
+        """
+        decisions = []
+        current_tickers = {p.ticker for p in portfolio.positions}
+        cash_per_trade = (portfolio.max_trade_amount or 150) / 2
+        cash_available = float(portfolio.cash_current or 0)
+
+        for signal in signals:
+            if signal.ticker in current_tickers:
+                continue
+            if signal.ticker not in prices:
+                continue
+            if signal.action in ("SELL", "STRONG_SELL"):
+                continue
+            if signal.action in ("BUY", "STRONG_BUY") and float(signal.confidence or 0) > 0.7:
+                amount = min(cash_per_trade, cash_available - 100)
+                if amount > 0:
+                    decisions.append({
+                        "ticker": signal.ticker,
+                        "action": "BUY",
+                        "amount": round(float(amount), 2),
+                        "confidence": round(float(signal.confidence or 0), 2),
+                        "reason": f"Fallback: signal {signal.action} avec confiance {float(signal.confidence or 0):.2f} (budget LLM épuisé)"
+                    })
+                    cash_available -= amount
+
+        logger.info("[DecisionLLM] Fallback: %d décisions basées sur les signaux", len(decisions))
+        return decisions

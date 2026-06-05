@@ -111,7 +111,7 @@ class Settings(BaseSettings):
         return 3002
 
     # ML / Sentiment Engine
-    ml_device: str = "cuda"
+    ml_device: str = "cpu"
     ml_model_finbert: str = "ProsusAI/finbert"
     ml_model_roberta: str = "mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
     ml_model_modern: str = "tabularisai/ModernFinBERT"
