@@ -22,9 +22,9 @@ services:
     env_file:
       - .env.staging
     environment:
-      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - DATABASE_URL=postgresql://trading:changeme@postgres:5432/trading_staging
       - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
-      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_API_URL=http://prefect-staging:10420/api
       - TRADING_ENVIRONMENT=staging
 
   trading-listener:
@@ -32,9 +32,9 @@ services:
     env_file:
       - .env.staging
     environment:
-      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - DATABASE_URL=postgresql://trading:changeme@postgres:5432/trading_staging
       - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
-      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_API_URL=http://prefect-staging:10420/api
       - TRADING_ENVIRONMENT=staging
 
   mcp-server:
@@ -44,25 +44,44 @@ services:
     env_file:
       - .env.staging
     environment:
-      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading_staging
+      - DATABASE_URL=postgresql://trading:changeme@postgres:5432/trading_staging
       - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
       - FASTMCP_HOST=0.0.0.0
       - FASTMCP_PORT=8001
       - TRADING_ENVIRONMENT=staging
 
-  prefect-server:
-    container_name: prefect-server-staging
+  prefect:
+    container_name: prefect-staging
+    image: trading-prefect-fixed:latest
     ports:
       - "10420:4200"
+    env_file:
+      - .env.staging
+    environment:
+      - DATABASE_URL=postgresql://trading:***@postgres:5432/trading_staging
+      - MONITORING_DB_URL=sqlite:////app/data/monitoring_staging.db
+      - PREFECT_API_URL=http://localhost:4200/api
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+      - PREFECT_SERVER_API_PORT=4200
+      - PREFECT_HOME=/data
+      - PREFECT_SERVER_ALLOW_WILDCARD_CORS=true
+      - TRADING_ENVIRONMENT=staging
+    command: ["/app/scripts/start_prefect.sh"]
     volumes:
       - prefect-data-staging:/data
-    environment:
-      - PREFECT_HOME=/data
-      - PREFECT_API_DATABASE_CONNECTION_URL=sqlite+aiosqlite:////data/prefect.db
-      - PREFECT_SERVER_ALLOW_WILDCARD_CORS=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - trading-network
 
 volumes:
   postgres-data-staging:
     driver: local
   prefect-data-staging:
     driver: local
+
+networks:
+  trading-network:
+    external: true
