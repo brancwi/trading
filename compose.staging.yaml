@@ -67,8 +67,13 @@ services:
       - PREFECT_SERVER_ALLOW_WILDCARD_CORS=true
       - TRADING_ENVIRONMENT=staging
     command: ["/app/scripts/start_prefect.sh"]
+    working_dir: /app
     volumes:
       - prefect-data-staging:/data
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./requirements.txt:/app/requirements.txt:ro
     depends_on:
       postgres:
         condition: service_healthy

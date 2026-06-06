@@ -18,8 +18,6 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   sleep 2
 done
 
-echo "Déploiement flows..."
-PREFECT_API_URL=http://localhost:4200/api python -m trading.flows.deploy
-
-echo "Démarrage worker..."
-PREFECT_API_URL=http://localhost:4200/api prefect worker start --pool default --limit 5
+echo "Démarrage runner avec serve()..."
+export PREFECT_API_URL=http://localhost:4200/api
+python -m trading.flows.serve
