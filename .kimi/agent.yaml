@@ -1,0 +1,56 @@
+version: 1
+agent:
+  name: orchestrator
+  system_prompt_path: ./system.md
+  tools:
+    - "kimi_cli.tools.agent:Agent"
+    - "kimi_cli.tools.ask_user:AskUserQuestion"
+    - "kimi_cli.tools.todo:SetTodoList"
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.background:TaskList"
+    - "kimi_cli.tools.background:TaskOutput"
+    - "kimi_cli.tools.background:TaskStop"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:ReadMediaFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:StrReplaceFile"
+    - "kimi_cli.tools.web:SearchWeb"
+    - "kimi_cli.tools.web:FetchURL"
+    - "kimi_cli.tools.plan:ExitPlanMode"
+    - "kimi_cli.tools.plan.enter:EnterPlanMode"
+  subagents:
+    po:
+      path: ./subagents/po.yaml
+      description: "Product Owner: analyze requirements and create feature specifications"
+    architect:
+      path: ./subagents/architect.yaml
+      description: "Architect: convert functional specs into testable contracts"
+    dev-tester:
+      path: ./subagents/dev-tester.yaml
+      description: "Dev-Tester: create tests and stubs (RED state)"
+    developer:
+      path: ./subagents/developer.yaml
+      description: "Developer: implement code to pass tests (GREEN state)"
+    reviewer:
+      path: ./subagents/reviewer.yaml
+      description: "Reviewer: review code, docs, and version control"
+    qa:
+      path: ./subagents/qa.yaml
+      description: "QA Coordinator: analyze quality results and make approval decisions"
+    qa-integration:
+      path: ./subagents/qa-integration.yaml
+      description: "QA Integration: run and validate integration tests"
+    qa-manual:
+      path: ./subagents/qa-manual.yaml
+      description: "QA Manual: validate E2E scenarios and UX"
+    qa-security:
+      path: ./subagents/qa-security.yaml
+      description: "QA Security: run security review and vulnerability assessment"
+    qa-metrics:
+      path: ./subagents/qa-metrics.yaml
+      description: "QA Metrics: calculate quality score and metrics"
+    cleanup:
+      path: ./subagents/cleanup.yaml
+      description: "Cleanup: organize and refactor project files"

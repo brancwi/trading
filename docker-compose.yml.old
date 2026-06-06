@@ -1,0 +1,201 @@
+# ============================================================
+# Docker Compose — Trading Engine v1.0
+# Services : API, Listener, Prefect Server, Metabase, PostgreSQL
+# ============================================================
+
+services:
+  # --------------------------------------------------------
+  # 1. PostgreSQL — Base de données principale
+  # --------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: trading-postgres
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: trading
+      TRADING_ENVIRONMENT: staging
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-backup:/backup
+    ports:
+      - "5432:5432"
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --------------------------------------------------------
+  # 2. FastAPI — Hermes Control Plane
+  # --------------------------------------------------------
+  trading-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-api
+    command: >
+      sh -c "python scripts/init_docker.py &&
+             uvicorn trading.api.main:app
+             --host 0.0.0.0
+             --port 8000
+             --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - trading-data:/app/data
+      - ./src:/app/src:ro
+    env_file:
+      - .env
+    environment:
+      - TRADING_ENVIRONMENT=staging
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    networks:
+      - trading-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------
+  # 3. Event Listener — WebSocket + Polling
+  # --------------------------------------------------------
+  trading-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-listener
+    command: python scripts/run_listener.py
+    volumes:
+      - trading-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - TRADING_ENVIRONMENT=staging
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    networks:
+      - trading-network
+    depends_on:
+      trading-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --------------------------------------------------------
+  # 4. MCP Server — Hermes Data Access (SSE transport)
+  # --------------------------------------------------------
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-mcp-server
+    command: >
+      sh -c "python scripts/run_mcp_server.py"
+    ports:
+      - "8001:8001"
+    volumes:
+      - trading-data:/app/data
+      - ./src:/app/src:ro
+    env_file:
+      - .env
+    environment:
+      - TRADING_ENVIRONMENT=staging
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD:-changeme}@postgres:5432/trading
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=8001
+      - FASTMCP_LOG_LEVEL=INFO
+    networks:
+      - trading-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/sse"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------
+  # 5. Prefect Server — Orchestration UI + API
+  # --------------------------------------------------------
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    container_name: prefect-server
+    command: >
+      prefect server start
+      --host 0.0.0.0
+      --port 4200
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/data
+    environment:
+      - TRADING_ENVIRONMENT=staging
+      - PREFECT_HOME=/data
+      - PREFECT_API_DATABASE_CONNECTION_URL=sqlite+aiosqlite:////data/prefect.db
+      - PREFECT_SERVER_ALLOW_WILDCARD_CORS=true
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # --------------------------------------------------------
+  # 5. Metabase — Dashboard & Analytics
+  # --------------------------------------------------------
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    volumes:
+      - metabase-data:/metabase-data
+      - trading-data:/trading-data:ro
+    environment:
+      - MB_DB_TYPE=h2
+      - MB_DB_FILE=/metabase-data/metabase.db
+      - MB_JETTY_PORT=3000
+      - MB_SITE_URL=http://localhost:3000
+      - MB_ENABLE_EMBEDDING=false
+      - MB_ANON_TRACKING_ENABLED=false
+    networks:
+      - trading-network
+    depends_on:
+      trading-api:
+        condition: service_healthy
+
+# --------------------------------------------------------
+# Volumes
+# --------------------------------------------------------
+volumes:
+  trading-data:
+    driver: local
+  prefect-data:
+    driver: local
+  metabase-data:
+    driver: local
+  postgres-data:
+    driver: local
+  postgres-backup:
+    driver: local
+
+# --------------------------------------------------------
+# Networks
+# --------------------------------------------------------
+networks:
+  trading-network:
+    driver: bridge

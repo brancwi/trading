@@ -20,17 +20,18 @@ from trading.flows.ml_signal_flow import ml_signal_generation_flow
 
 logger = logging.getLogger(__name__)
 
+# Mapping: nom_deployment -> (flow, schedule_params, entrypoint)
 DEPLOYMENTS = [
-    ("ingestion-every-2min", ingestion_flow, {"interval": 120}),
-    ("metrics-hourly", metrics_flow, {"interval": 3600}),
-    ("notifications-daily", notifications_flow, {"cron": "0 20 * * *"}),
-    ("validation-every-4h", validation_flow, {"interval": 14400}),
-    ("fusion-training-daily", fusion_training_flow, {"cron": "0 2 * * *"}),
-    ("signal-training-daily", signal_training_flow, {"cron": "0 3 * * *"}),
-    ("sentiment-every-5min", sentiment_analysis_flow, {"interval": 300}),
-    ("ml-signals-every-15min", ml_signal_generation_flow, {"interval": 900}),
-    ("strategy-every-5min", strategy_execution_flow, {"interval": 300}),
-    ("command-on-demand", command_processing_flow, {}),
+    ("ingestion-every-2min", ingestion_flow, {"interval": 120}, "src/trading/flows/ingestion_flow.py:ingestion_flow"),
+    ("metrics-hourly", metrics_flow, {"interval": 3600}, "src/trading/flows/metrics_flow.py:metrics_flow"),
+    ("notifications-daily", notifications_flow, {"cron": "0 20 * * *"}, "src/trading/flows/notifications_flow.py:notifications_flow"),
+    ("validation-every-4h", validation_flow, {"interval": 14400}, "src/trading/flows/validation_flow.py:validation_flow"),
+    ("fusion-training-daily", fusion_training_flow, {"cron": "0 2 * * *"}, "src/trading/flows/fusion_training_flow.py:fusion_training_flow"),
+    ("signal-training-daily", signal_training_flow, {"cron": "0 3 * * *"}, "src/trading/flows/signal_training_flow.py:signal_training_flow"),
+    ("sentiment-every-5min", sentiment_analysis_flow, {"interval": 300}, "src/trading/flows/sentiment_flow.py:sentiment_analysis_flow"),
+    ("ml-signals-every-15min", ml_signal_generation_flow, {"interval": 900}, "src/trading/flows/ml_signal_flow.py:ml_signal_generation_flow"),
+    ("strategy-every-5min", strategy_execution_flow, {"interval": 300}, "src/trading/flows/strategy_flow.py:strategy_execution_flow"),
+    ("command-on-demand", command_processing_flow, {}, "src/trading/flows/command_flow.py:command_processing_flow"),
 ]
 
 
@@ -54,8 +55,7 @@ async def create_deployments():
 
         # Créer les nouveaux deployments
         print("Création des deployments...")
-        for name, flow, params in DEPLOYMENTS:
-            # Récupérer le flow_id depuis le serveur
+        for name, flow, params, entrypoint in DEPLOYMENTS:
             print(f"  Flow: {flow.name}...")
             flow_obj = await client.read_flow_by_name(flow.name)
             flow_id = flow_obj.id
@@ -70,6 +70,8 @@ async def create_deployments():
                 name=name,
                 work_pool_name="default",
                 schedules=schedules,
+                entrypoint=entrypoint,
+                path=".",
             )
             print(f"  Créé: {name}")
 
